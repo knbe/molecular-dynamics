@@ -309,7 +309,7 @@ end
 #velocityHistogram
 #showPlots
 
-s = System(64, 10.0, 1.0)
+s = System(16, 10.0, 1.0)
 
 rectangularLatticePositions!(s)
 randomVelocities!(s)
