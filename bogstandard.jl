@@ -309,13 +309,17 @@ end
 #velocityHistogram
 #showPlots
 
+function plot_positions(s::System)
+	N = s.N
+	scatter(s.x[1:N], s.x[(N+1):2N])
+end
+
 s = System(16, 10.0, 1.0)
 
 rectangularLatticePositions!(s)
 randomVelocities!(s)
 results(s)
-scatter(s.x[1:s.N], s.x[(s.N+1):(2*s.N)])
 
 evolve!(s, 10.0)
 results(s)
-scatter(s.x[1:s.N], s.x[(s.N+1):(2*s.N)])
+plot_positions(s)
