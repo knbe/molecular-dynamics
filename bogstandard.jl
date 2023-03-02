@@ -2,8 +2,14 @@
 # this is a barebones reimplementation of the old python script
 # units: m = ε = σ = k_B = 1
 
-using Plots
+push!(LOAD_PATH, "./")
+using VectorMath
 using Statistics
+using Plots
+
+@static if @isdefined(render)
+	using GLMakie
+end
 
 dt = 0.001
 sampleInterval = 100
@@ -28,7 +34,7 @@ mutable struct System
 	forceType::String
 end
 
-function System(N::Int64=16, L::Float64=10.0, initTemp::Float64=1.0)
+function System(N::Int64=64, L::Float64=10.0, initTemp::Float64=1.0)
 	N = N
 	L = L
 	initTemp = initTemp
@@ -54,24 +60,6 @@ function System(N::Int64=16, L::Float64=10.0, initTemp::Float64=1.0)
 	)
 end
 
-# VECTORS/MATH
-
-function dotProduct(v1::Vector{Float64}, v2::Vector{Float64})
-	dotProduct = 0
-	for i in 1:length(v)
-		dotProduct += v1[i] * v2[i]
-	end
-	return dotProduct
-end
-
-function magnitudeSquared(v::Vector{Float64})
-	magSq = 0
-	for i in 1:length(v)
-		magSq += v[i] * v[i]
-	end
-	return magSq
-end
-
 # FORCES
 
 function minimumImage(s::System, x)
@@ -82,9 +70,13 @@ function minimumImage(s::System, x)
 end
 
 function force(s::System)
-	f, virial = lennardJonesForce(s)
-	s.virialAccum += virial
-	return f
+	# fairly sure this is more efficient than having a big old if statement
+	@static if @isdefined(lennardJones)
+		force, virial = lennardJonesForce(s)
+		s.virialAccum += virial
+		return force
+	end
+	# add functionality for other forces
 end
 
 function lennardJonesForce(s::System)
@@ -99,9 +91,7 @@ function lennardJonesForce(s::System)
 	y = s.x[(N+1):2N]
 	f = zeros(2N)
 
-
-	minImg = minimumImage(s, x)
-
+	#minImg = minimumImage(s, x)
 	#println(minImg)
 	for i in 1:N
 		for j in 2:N
@@ -122,8 +112,7 @@ function lennardJonesForce(s::System)
 			r2inv = 1.0 / (dx^2 + dy^2 + tiny)
 			r6inv = r2inv^3
 			r8inv = r2inv * r6inv
-			#c = 48.0 * r8inv * r6inv - 24.0 * r8inv
-			c = 48.0 * r2inv^7 - 24.0 * r2inv^4
+			c = 48.0 * r2inv^6 - 24.0 * r2inv^4
 			fx = dx * c
 			fy = dy * c
 
@@ -230,7 +219,7 @@ end
 # MEASUREMENTS
 
 function kineticEnergy(s::System)
-	return 0.5 * magnitudeSquared(s.v)
+	return 0.5 * mag_sq(s.v)
 end
 
 function potentialEnergy(s::System)
@@ -279,42 +268,15 @@ function results(s::System)
 		)
 end
 
-# time reversal test
-
-#rectangularLatticePositions
-#randomVelocities
-#results
-#evolve(time=20.0)
-#reverseTime
-#evolve
-#results
-#plotPositions
-#showPlots
-
-# equilibration and statistics
-
-#triangularLatticePositions
-#randomVelocities
-#plotPositions
-#results
-#
-#evolve(time=10.0) # initial time evol
-#resetStatistics	# remove transient behaviour
-#evolve(time=20.0) # accumulate statistics
-#
-#results
-#plotEnergy
-#plotTrajectories
-#plotTemperature
-#velocityHistogram
-#showPlots
 
 function plot_positions(s::System)
 	N = s.N
 	scatter(s.x[1:N], s.x[(N+1):2N])
 end
 
-s = System(16, 10.0, 1.0)
+lennardJones = 1
+
+s = System(64, 10.0, 1.0)
 
 rectangularLatticePositions!(s)
 randomVelocities!(s)
