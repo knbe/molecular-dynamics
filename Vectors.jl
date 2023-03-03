@@ -1,4 +1,4 @@
-module VectorMath
+module Vectors
 
 function dot(v1::Vector{Float64}, v2::Vector{Float64})
 	dotProduct = 0
@@ -25,13 +25,13 @@ function mag_sq(v::Vector{Float64})
 end
 
 function mag(v::Vector{Float64})
-	return sqrt(magSq(v))
+	return sqrt(mag_sq(v))
 end
 
 function unit(v::Vector{Float64})
 	return v ./ mag(v)
 end
 
-export dot, mag, mag_sq, unit
+#export dot, mag, mag_sq, unit
 
 end
