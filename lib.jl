@@ -180,22 +180,22 @@ end
 
 function verlet_step!(sys::ParticleSystem2D)
 	a = force(sys)
-	sys.x .+= sys.v .* sys.dt .+ 0.5 * (sys.dt)^2 .* a
+	sys.x .+= sys.v .* dt .+ 0.5 * (dt)^2 .* a
 	sys.x .%= sys.length
-	sys.v .+= 0.5 * sys.dt .* (a .+ force(sys))
+	sys.v .+= 0.5 * dt .* (a .+ force(sys))
 end
 
 function evolve!(sys::ParticleSystem2D, time::Float64=10.0)
-	steps = Int64(abs(time/sys.dt))
+	steps = Int64(abs(time/dt))
 
 	for step in 1:steps
 		verlet_step!(sys)
 		zero_total_momentum!(sys)
 
-		sys.t += sys.dt
+		sys.t += dt
 		push!(sys.tPoints, sys.t)
 
-		if (step % sys.sampleInterval == 0)
+		if (step % sampleInterval == 0)
 			push!(sys.energyPoints, energy(sys))
 			push!(sys.sampleTimePoints, sys.t)
 			push!(sys.xPoints, sys.x)
@@ -210,13 +210,30 @@ function evolve!(sys::ParticleSystem2D, time::Float64=10.0)
 	end
 end
 
-function zero_total_momentum(sys::ParticleSystem2D)
+function zero_total_momentum!(sys::ParticleSystem2D)
+	N = sys.numParticles
+	vx = sys.v[1:2:2N]
+	vy = sys.v[2:2:2N]
+
+	vx .-= mean(vx)
+	vy .-= mean(vy)
+
+	sys.v[1:2:2N] = vx
+	sys.v[2:2:2N] = vy
 end
 
 function reverse_time(sys::ParticleSystem2D)
+	dt = -dt
 end
 
 function cool(sys::ParticleSystem2D, time::Float64=1.0)
+	steps = Int64(time/dt)
+	for step in 1:steps
+		verlet_step!(sys)
+		sys.v .*= (1.0 - dt)
+	end
+
+	reset_statistics!(sys)
 end
 
 # INITIAL CONDITIONS
@@ -243,16 +260,16 @@ function rectangular_lattice_positions!(sys::ParticleSystem2D)
 	dx = sys.length / nx
 	dy = sys.length / ny
 
-	for i in 1:nx
-		for j in 1:ny
-			sys.x[2*(i*ny+j)-1] = (i - 0.5) * dx
-			sys.x[2*(i*ny+j)] = (j - 0.5) * dy
+	for i in 0:(nx-1)
+		for j in 0:(ny-1)
+			sys.x[2*(i*ny+j)+1] = (i + 0.5) * dx
+			sys.x[2*(i*ny+j)+2] = (j + 0.5) * dy
 		end
 	end
 end
 
 function random_velocities!(sys::ParticleSystem2D)
-	sys.v = rand(2*sys.numParticles) - 0.5
+	sys.v = rand(2*sys.numParticles) .- 0.5
 	zero_total_momentum!(sys)
 	T = temperature(sys)
 	sys.v .*= sqrt(sys.initTemp/T)
@@ -323,7 +340,7 @@ end
 function mean_pressure(sys::ParticleSystem2D)
 	# factor of half because force is calculated twice each step
 	meanVirial = 0.5 * sys.virialAccumulator / sys.steps
-	return 1.0 + 0.5 * meanVirial / (sys.N * mean_temperature(sys))
+	return 1.0 + 0.5 * meanVirial / (sys.numParticles * mean_temperature(sys))
 end
 
 function heat_capacity(sys::ParticleSystem2D)
@@ -347,7 +364,7 @@ end
 
 function plot_positions(sys::ParticleSystem2D)
 	N = sys.numParticles
-	plot()
+	plot(size=(800,800))
 	scatter!(sys.x[1:2:2N], sys.x[2:2:2N])
 	xlabel!("x")
 	ylabel!("y")
@@ -370,6 +387,7 @@ function plot_energy(sys::ParticleSystem2D)
 	plot!(sys.sampleTimePoints, sys.energyPoints)
 	xlabel!("t")
 	ylabel!("energy")
+	#ylims!(-2,2)
 end
 
 function velocity_histogram(sys::ParticleSystem2D)
@@ -379,8 +397,40 @@ function velocity_histogram(sys::ParticleSystem2D)
 	ylabel!("probability")
 end
 
+function console_log(sys::ParticleSystem2D)
+	println(
+		  "  time:			", sys.t, 
+		"\n  total energy:		", energy(sys), 
+		"\n  temperature:		", temperature(sys),
+		)
+
+	if sys.steps > 0
+		println(
+			"\n  mean energy:		", mean_energy(sys), 
+			"\n  standard dev:		", std_energy(sys),
+			"\n  C_V:			", heat_capacity(sys),
+			"\n  PV/NkT:			", mean_pressure(sys),
+			)
+	end
+
+end
+
 # RUN
 ################################################################################
 
-sys = ParticleSystem2D(4)
-lennard_jones_force(sys)
+sys = ParticleSystem2D(16)
+#lennard_jones_force(sys)
+
+# equilibriation and statistics
+rectangular_lattice_positions!(sys)
+random_velocities!(sys)
+console_log(sys)
+plot_positions(sys)
+
+evolve!(sys, 10.0)
+#reset_statistics!(sys)
+#evolve!(sys, 20.0)
+console_log(sys)
+plot_energy(sys)
+#plot_temperature(sys)
+#velocity_histogram(sys)
