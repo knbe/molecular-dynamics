@@ -4,10 +4,7 @@ using Statistics
 using Vectors
 using Plots
 
-#mutable struct State
-#	pos
-#	vel
-#end
+import LinearAlgebra: norm
 
 mutable struct ParticleSystem
 	N::Int64
@@ -15,7 +12,6 @@ mutable struct ParticleSystem
 	L::Float64
 	T₀::Float64
 	t::Float64
-	#state::State
 	state::Matrix{Float64}
 end
 
@@ -28,7 +24,6 @@ end
 
 @views position(state) = state[:,1:(Int64((size(state)[2])/2))]
 @views velocity(state) = state[:,(Int64((size(state)[2])/2)+1):end]
-
 @views particle(n, matrix) = matrix[n,:]
 @views coordinate(i, matrix) = matrix[:,i]
 
@@ -64,7 +59,7 @@ function zero_total_momentum!(velocity)
 	end
 end
 
-function minimum_separation_vector(p1::Vector{Float64}, p2::Vector{Float64}, L::Float64)
+function minimum_separation_vector(p1, p2, L::Float64)
 	r12 = p2 .- p1 # vector from point p1 to point p2
 
 	for i in 1:length(r12)
@@ -91,7 +86,7 @@ function lennard_jones_force(sys::ParticleSystem)
 				rij = minimum_separation_vector(
 					sys.state.pos[i], sys.state.pos[j], sys.L)
 
-				r2inv = 1.0 / (mag_sq(rij) + tiny)
+				r2inv = 1.0 / ((norm(rij))^2 + tiny)
 				rhat = unit(rij)
 
 				a = (1.0/mag(rij)) * 48.0 * r2inv^6 - 24.0 * r2inv^3
@@ -115,13 +110,50 @@ function lennard_jones_force(sys::ParticleSystem)
 	return accel
 end
 
-function verlet_step!(sys::ParticleSystem, dt::Float64)
-	accel = lennard_jones_force(sys)
-	for i in 1:sys.N
-		sys.state.pos[i] .+= (sys.state.vel[i] .* dt) .+ (0.5 * dt^2 .* accel[i])
-		sys.state.pos[i] = sys.state.pos[i] .% sys.L
-		sys.state.vel[i] .+= 0.5 * dt .* (accel[i] + lennard_jones_force(sys)[i])
+function ljforce(position, L::Float64)
+	N,D = size(position)
+	acceleration = zeros(N,D)
+	tiny = 1.0e-40
+	#println(accel)
+
+	for i in 1:N
+		accel_i = zeros(D)
+		for j in 1:N
+			if i != j
+				sep = minimum_separation_vector(
+					particle(i, position), particle(j, position), L
+					)
+
+	#			#println(typeof(sep)
+				sepSquared = mag_sq(sep) + tiny
+
+				magnitude = (1.0/mag(sep)) * 
+					(48.0 * sepSquared^(-6) - 24.0 * sepSquared^(-3))
+				direction = unit(sep)
+				accel_ij = magnitude .* direction
+				accel_i += accel_ij
+	
+#				println("i = ", i, "j = ", j)
+#				println(sep, ", ", sepSquared)
+#				println(magnitude)
+#				println(direction)
+#				println(accel_ij)
+#				println(accel_i)
+			end
+		end
+		particle(i, acceleration)[1] = accel_i[1]
+		particle(i, acceleration)[2] = accel_i[2]
 	end
+
+	return acceleration
+end
+
+function verlet_step!(state::Matrix{Float64}, dt::Float64, L::Float64)
+	acceleration = ljforce(position(state), L)
+
+	position(state) .+= velocity(state) .* dt .+ 0.5 * dt^2 .* acceleration
+	position(state) .% L
+	velocity(state) .+= 0.5 * dt .* (acceleration + ljforce(position(state), L))
 end
 
 function evolve!()
@@ -134,8 +166,8 @@ function run!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
 	tdata = 0:dt:tt
 
 	for t in 1:numSteps
-		#verlet_step!(sys, dt)
-		#zero_total_momentum!(s)
+		verlet_step!(sys.state, dt, sys.L)
+		zero_total_momentum!(velocity(sys.state))
 
 		#s.t += dt
 		#push!(statedata, sys.state)
@@ -148,7 +180,10 @@ end
 
 function plot_positions(sys::ParticleSystem)
 	N = sys.N
-	#scatter(s.x[1:N], s.x[(N+1):2N])
+	xdata = coordinate(1, position(sys.state))
+	ydata = coordinate(2, position(sys.state))
+	plot(size=(800,800))
+	scatter!(xdata, ydata)
 end
 
 
@@ -158,5 +193,10 @@ initialize_positions_rectangular!(sys)
 initialize_velocities!(sys)
 zero_total_momentum!(velocity(sys.state))
 run!(sys, 0.01, 10.0)
+plot_positions(sys)
+
+#ljforce(position(sys.state), 5.0)
+#verlet_step!(sys.state, 0.01, 5.0)
+
 
 #accel = lennard_jones_force(sys)
