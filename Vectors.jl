@@ -32,6 +32,6 @@ function unit(v::Vector{Float64})
 	return v ./ mag(v)
 end
 
-#export dot, mag, mag_sq, unit
+export dot, mag, mag_sq, unit
 
 end
