@@ -26,13 +26,11 @@ function ParticleSystem(N::Int64, D::Int64, L::Float64, T₀::Float64)
 	return ParticleSystem(N, D, L, T₀, t, state)
 end
 
-#@views position(state) = state[1:Int64((length(state)/2))]
-#@views velocity(state) = state[Int64((length(state)/2)+1):end]
-
 @views position(state) = state[:,1:(Int64((size(state)[2])/2))]
 @views velocity(state) = state[:,(Int64((size(state)[2])/2)+1):end]
 
 @views particle(n, matrix) = matrix[n,:]
+@views coordinate(i, matrix) = matrix[:,i]
 
 function initialize_positions_rectangular!(sys::ParticleSystem)
 	NL = Int64(floor((sys.N)^(1/sys.D)))
@@ -58,15 +56,12 @@ function initialize_velocities!(sys::ParticleSystem)
 	end
 end
 
-function zero_total_momentum!(state::Matrix{Float64})
-	vel = velocity(state)
-	D = size(vel)[2]
+function zero_total_momentum!(velocity)
+	numCoordinates = size(velocity)[2]
 	
-	for d in 1:D
-		vel[:,d] .-= mean(vel[:,d])
+	for i in 1:numCoordinates
+		coordinate(i, velocity) .-= mean(coordinate(i, velocity))
 	end
-
-	velocity(state) = vel
 end
 
 function minimum_separation_vector(p1::Vector{Float64}, p2::Vector{Float64}, L::Float64)
@@ -129,14 +124,17 @@ function verlet_step!(sys::ParticleSystem, dt::Float64)
 	end
 end
 
-function evolve!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
+function evolve!()
+end
+
+function run!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
 	numSteps = Int64(floor(tt/dt))
 
 	statedata = [ sys.state ]
 	tdata = 0:dt:tt
 
 	for t in 1:numSteps
-		verlet_step!(sys, dt)
+		#verlet_step!(sys, dt)
 		#zero_total_momentum!(s)
 
 		#s.t += dt
@@ -145,7 +143,7 @@ function evolve!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
 
 	#xdata = [ statedata ]
 	#plot(sy
-	println(statedata[1][1])
+	#println(statedata[1][1])
 end
 
 function plot_positions(sys::ParticleSystem)
@@ -158,7 +156,7 @@ sys = ParticleSystem(16, 2, 5.0, 1.0)
 
 initialize_positions_rectangular!(sys)
 initialize_velocities!(sys)
-zero_total_momentum!(sys.state)
-#evolve!(sys, 0.01, 10.0)
+zero_total_momentum!(velocity(sys.state))
+run!(sys, 0.01, 10.0)
 
 #accel = lennard_jones_force(sys)
