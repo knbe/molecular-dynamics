@@ -49,6 +49,12 @@ function initialize_velocities!(sys::ParticleSystem)
 	for n in 1:length(velocity(sys.state))
 		velocity(sys.state)[n] = rand() - 0.5
 	end
+
+	T = temperature(sys)
+	println(T)
+	rescale = sqrt(sys.T₀ / T)
+	velocity(sys.state) .*= rescale
+
 end
 
 function zero_total_momentum!(velocity)
@@ -57,6 +63,19 @@ function zero_total_momentum!(velocity)
 	for i in 1:numCoordinates
 		coordinate(i, velocity) .-= mean(coordinate(i, velocity))
 	end
+end
+
+function kinetic_energy(velocity)
+	N,D = size(velocity)
+	total = 0.0
+	for d in 1:D
+		total += mag_sq(velocity[:,d])
+	end
+	return total
+end
+
+function temperature(sys::ParticleSystem)
+	return kinetic_energy(velocity(sys.state)) / sys.N
 end
 
 function minimum_separation_vector(p1, p2, L::Float64)
@@ -162,10 +181,10 @@ end
 function run!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
 	numSteps = Int64(floor(tt/dt))
 
-	statedata = [ sys.state ]
-	tdata = 0:dt:tt
-
-	for t in 1:numSteps
+#	statedata = [ sys.state ]
+#	tdata = 0:dt:tt
+#
+	for t in 1:150
 		verlet_step!(sys.state, dt, sys.L)
 		zero_total_momentum!(velocity(sys.state))
 
@@ -192,7 +211,7 @@ sys = ParticleSystem(16, 2, 5.0, 1.0)
 initialize_positions_rectangular!(sys)
 initialize_velocities!(sys)
 zero_total_momentum!(velocity(sys.state))
-run!(sys, 0.01, 10.0)
+run!(sys, 0.001, 0.2)
 plot_positions(sys)
 
 #ljforce(position(sys.state), 5.0)
