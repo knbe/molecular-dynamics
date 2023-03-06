@@ -2,7 +2,7 @@ module Vectors
 
 function dot(v1::Vector{Float64}, v2::Vector{Float64})
 	dotProduct = 0
-	for i in 1:length(v)
+	for i in 1:length(v1)
 		dotProduct += v1[i] * v2[i]
 	end
 	return dotProduct
