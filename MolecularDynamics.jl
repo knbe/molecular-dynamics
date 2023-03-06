@@ -2,70 +2,71 @@ push!(LOAD_PATH, "./")
 
 using Statistics
 using Vectors
+using Plots
 
-mutable struct State
-	pos
-	vel
-end
+#mutable struct State
+#	pos
+#	vel
+#end
 
 mutable struct ParticleSystem
 	N::Int64
-	d::Int64
+	D::Int64
 	L::Float64
 	T₀::Float64
 	t::Float64
-	state::State
+	#state::State
+	state::Matrix{Float64}
 end
 
-function ParticleSystem(N::Int64, d::Int64, L::Float64, T₀::Float64)
-	N_axis = Int64(floor(sqrt(N)))
-	N = N_axis^d
-	pos = [ zeros(d) for i in 1:N ]
-	vel = [ zeros(d) for i in 1:N ]
+function ParticleSystem(N::Int64, D::Int64, L::Float64, T₀::Float64)
+	state = zeros(N, 2D)
 	t = 0.0
 	
-	return ParticleSystem(N, d, L, T₀, t, State(pos, vel))
+	return ParticleSystem(N, D, L, T₀, t, state)
 end
 
+#@views position(state) = state[1:Int64((length(state)/2))]
+#@views velocity(state) = state[Int64((length(state)/2)+1):end]
+
+@views position(state) = state[:,1:(Int64((size(state)[2])/2))]
+@views velocity(state) = state[:,(Int64((size(state)[2])/2)+1):end]
+
+@views particle(n, matrix) = matrix[n,:]
+
 function initialize_positions_rectangular!(sys::ParticleSystem)
-	N_axis = (sys.N)^(1/sys.d)
-	a = sys.L / N_axis
+	NL = Int64(floor((sys.N)^(1/sys.D)))
+	if sys.N != NL^(sys.D)
+		sys.N = NL^(sys.D)
+	end
+
+	a = sys.L / NL	# lattice spacing
 
 	n = 1
-	for i in 1:N_axis
-		for j in 1:N_axis
-			sys.state.pos[n][1] = (i - 0.5) * a
-			sys.state.pos[n][2] = (j - 0.5) * a
+	for i in 1:NL
+		for j in 1:NL
+			particle(n, position(sys.state))[1] = (i - 0.5) * a
+			particle(n, position(sys.state))[2] = (j - 0.5) * a
 			n += 1
 		end
 	end
 end
 
 function initialize_velocities!(sys::ParticleSystem)
-	sys.state.vel = [ (rand(sys.d) .- 0.5) for i in 1:sys.N ]
+	for n in 1:length(velocity(sys.state))
+		velocity(sys.state)[n] = rand() - 0.5
+	end
 end
 
-function zero_total_momentum!(sys::ParticleSystem)
-#	for coord in 1:sys.d
-#		v = [ sys.state.vel[n][coord] for n in sys.N ]
-#
-#		v .-= mean(v)
-#
-#		for n in 1:sys.N
-#			sys.state.vel[n][coord] = v[n]
-#		end
-#	end
+function zero_total_momentum!(state::Matrix{Float64})
+	vel = velocity(state)
+	D = size(vel)[2]
 	
-	vx = [ sys.state.vel[n][1] for n in 1:sys.N ]
-	vy = [ sys.state.vel[n][2] for n in 1:sys.N ]
-
-	vx .-= mean(vx)
-	vy .-= mean(vy)
-
-	for n in 1:sys.N
-		sys.state.vel[n][1] = vx[n]
-		sys.state.vel[n][2] = vy[n]
+	for d in 1:D
+		vel[:,d] .-= mean(vel[:,d])
 	end
+
+	velocity(state) = vel
 end
 
 function minimum_separation_vector(p1::Vector{Float64}, p2::Vector{Float64}, L::Float64)
@@ -147,12 +148,17 @@ function evolve!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
 	println(statedata[1][1])
 end
 
+function plot_positions(sys::ParticleSystem)
+	N = sys.N
+	#scatter(s.x[1:N], s.x[(N+1):2N])
+end
+
 
 sys = ParticleSystem(16, 2, 5.0, 1.0)
 
 initialize_positions_rectangular!(sys)
 initialize_velocities!(sys)
-zero_total_momentum!(sys)
-evolve!(sys, 0.01, 10.0)
+zero_total_momentum!(sys.state)
+#evolve!(sys, 0.01, 10.0)
 
 #accel = lennard_jones_force(sys)
