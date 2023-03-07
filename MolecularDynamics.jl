@@ -1,81 +1,74 @@
-push!(LOAD_PATH, "./")
+# molecular dynamics in 2d
 
 using Statistics
-using Vectors
-using Plots
-
-import LinearAlgebra: norm
 
 mutable struct ParticleSystem
-	N::Int64
-	D::Int64
-	L::Float64
-	T₀::Float64
-	t::Float64
-	state::Matrix{Float64}
+	numParticles::Int64		# number of particles
+	length::Float64			# length of square side
+	initTemp::Float64
+	t::Float64			# initial time
+	tPoints::Vector{Float64}	# array of time steps added to during integration
+	steps::Int64
+	energyPoints::Vector{Float64}	# list of energy, sampled every sampleInterval steps
+	sampleTimePoints::Vector{Float64}
+	tempPoints::Vector{Float64}
+	tempAccumulator::Float64
+	squareTempAccumulator::Float64
+	virialAccumulator::Float64
+	x::Vector{Float64}		# array of N (x,y) positions
+	v::Vector{Float64}		# array of N (vx,vy) velocities
+	xPoints
+	vPoints
+	forceType::String
 end
 
-function ParticleSystem(N::Int64, D::Int64, L::Float64, T₀::Float64)
-	state = zeros(N, 2D)
+function ParticleSystem(numParticles::Int64=64, 
+		length::Float64=10.0, initTemp::Float64=1.0)
 	t = 0.0
-	
-	return ParticleSystem(N, D, L, T₀, t, state)
+	tPoints = [ 0.0 ]
+	steps = 0
+	energyPoints = []
+	sampleTimePoints = []
+	tempPoints = [ initTemp ]
+	tempAccumulator = 0.0
+	squareTempAccumulator = 0.0
+	virialAccumulator = 0.0
+	x = zeros(2 * numParticles)
+	v = zeros(2 * numParticles)
+	xPoints = []
+	vPoints = []
+	forceType = "lennardJones"
+
+	return ParticleSystem2D(
+		numParticles, length, initTemp, t, tPoints, steps, 
+		energyPoints, sampleTimePoints, tempPoints, 
+		tempAccumulator, squareTempAccumulator, 
+		virialAccumulator, x, v, xPoints, vPoints, forceType
+		)
 end
 
-@views position(state) = state[:,1:(Int64((size(state)[2])/2))]
-@views velocity(state) = state[:,(Int64((size(state)[2])/2)+1):end]
-@views particle(n, matrix) = matrix[n,:]
-@views coordinate(i, matrix) = matrix[:,i]
-
-function initialize_positions_rectangular!(sys::ParticleSystem)
-	NL = Int64(floor((sys.N)^(1/sys.D)))
-	if sys.N != NL^(sys.D)
-		sys.N = NL^(sys.D)
-	end
-
-	a = sys.L / NL	# lattice spacing
-
-	n = 1
-	for i in 1:NL
-		for j in 1:NL
-			particle(n, position(sys.state))[1] = (i - 0.5) * a
-			particle(n, position(sys.state))[2] = (j - 0.5) * a
-			n += 1
+function minimum_image(x::Vector{Float64}, L::Float64)
+	halfL = 0.5 * L
+	for i in 1:length(x)
+		if x[i] > halfL
+			x[i] -= L
+		elseif x[i] < -halfL
+			x[i] += L
 		end
 	end
+	#return (x .+ halfL) .% L .- halfL
+	return x
 end
 
-function initialize_velocities!(sys::ParticleSystem)
-	for n in 1:length(velocity(sys.state))
-		velocity(sys.state)[n] = rand() - 0.5
+function force(sys::ParticleSystem2D)
+	if sys.forceType == "lennardJones"
+		force, virial = lennard_jones_force2(sys)
+	elseif sys.forceType == "powerLaw"
+		force, virial = power_law_force(sys)
 	end
 
-	T = temperature(sys)
-	println(T)
-	rescale = sqrt(sys.T₀ / T)
-	velocity(sys.state) .*= rescale
-
-end
-
-function zero_total_momentum!(velocity)
-	numCoordinates = size(velocity)[2]
-	
-	for i in 1:numCoordinates
-		coordinate(i, velocity) .-= mean(coordinate(i, velocity))
-	end
-end
-
-function kinetic_energy(velocity)
-	N,D = size(velocity)
-	total = 0.0
-	for d in 1:D
-		total += mag_sq(velocity[:,d])
-	end
-	return total
-end
-
-function temperature(sys::ParticleSystem)
-	return kinetic_energy(velocity(sys.state)) / sys.N
+	sys.virialAccumulator += virial
+	return force
 end
 
 function minimum_separation_vector(p1, p2, L::Float64)
@@ -92,130 +85,325 @@ function minimum_separation_vector(p1, p2, L::Float64)
 	return r12
 end
 
-function lennard_jones_force(sys::ParticleSystem)
+function lennard_jones_force2(sys::ParticleSystem2D)
+	N = sys.numParticles
+	L = sys.length
 	tiny = 1.0e-40
+	virial = 0.0
 
-	accel = [ zeros(sys.d) for i in 1:sys.N ]
+	x = sys.x[1:2:2N]
+	y = sys.x[2:2:2N]
+	force = zeros(2*N)
 
-	n = 1
-	for i in 1:sys.N
-		accel_i = zeros(sys.d)
-		for j in 1:sys.N
-			if i != j
-				rij = minimum_separation_vector(
-					sys.state.pos[i], sys.state.pos[j], sys.L)
+	#minImg = minimumImage(s, x)
+	#println(minImg)
+	for i in 1:N
+		Threads.@threads for j in (i+1):N
+			dx = minimum_image(x .- x[i], L)
+			dy = minimum_image(y .- y[i], L)
 
-				r2inv = 1.0 / ((norm(rij))^2 + tiny)
-				rhat = unit(rij)
+			r2inv = 1.0 ./ (dx.^2 .+ dy.^2 .+ tiny)
+			f = 48.0 .* r2inv.^7 - 24.0 .* r2inv.^4
+			fx = dx .* f
+			fy = dy .* f
 
-				a = (1.0/mag(rij)) * 48.0 * r2inv^6 - 24.0 * r2inv^3
-				accel_ij = rhat .* a
-				accel_i += accel_ij
+			fx[i] = 0.0	# no self force
+			fy[i] = 0.0
 
-#				println("i = ", i, ", j = ", j)
-#				println("rij = ", rij)
-#				println("r2inv = ", r2inv)
-#				println("rhat = ", rhat)
-#				println("a = ", a)
-#				println("accel_ij = ", accel_ij)
-#				println("accel_i = ", accel_i)
-#				println()
-			end
+
+#			println("i = ", i, ", j = ", j)
+#			println(dx)
+#			println(dy)
+#			println(f)
+#			println(sum(fx))
+#			println(sum(fy))
+			#force[2*i-1] = sum(fx)
+			#force[2*i] = sum(fy)
+			#println(force)
+
+			virial += dot(fx,dx) + dot(fy,dy)
 		end
-		n += 1
-		accel[i] = accel_i
 	end
 
-	return accel
+	return force, (0.5 * virial)
 end
 
-function ljforce(position, L::Float64)
-	N,D = size(position)
-	acceleration = zeros(N,D)
+# TIME EVOLUTION
+################################################################################
+
+function verlet_step!(sys::ParticleSystem2D)
+	a = force(sys)
+	sys.x .+= sys.v .* dt .+ 0.5 * (dt)^2 .* a
+	sys.x .%= sys.length
+	sys.v .+= 0.5 * dt .* (a .+ force(sys))
+end
+
+function evolve!(sys::ParticleSystem2D, time::Float64=10.0)
+	steps = Int64(abs(time/dt))
+
+	@static if @isdefined(render)
+		println("rendering")
+		pos = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
+		#posx = Observable{Vector{Float64}}(sys.x[1:2:2*sys.numParticles])
+		#posy = Observable{Vector{Float64}}(sys.x[2:2:2*sys.numParticles])
+		fontsize_theme = Theme(fontsize=40)
+		set_theme!(fontsize_theme)
+		fig = Figure(resolution=(800,800))
+		ax1 = Axis(fig[1,1])
+		#scatter!(ax1, pos, markersize=5.0)
+		GLMakie.scatter!(ax1, pos, markersize=20.0)
+		#limits!(ax1, 0, sys.length)
+		display(fig)
+	end
+
+	for step in 1:steps
+		verlet_step!(sys)
+		zero_total_momentum!(sys)
+
+		sys.t += dt
+		push!(sys.tPoints, sys.t)
+
+		if (step % sampleInterval == 0)
+			push!(sys.energyPoints, energy(sys))
+			push!(sys.sampleTimePoints, sys.t)
+			push!(sys.xPoints, sys.x)
+			push!(sys.vPoints, sys.v)
+
+		end
+
+		T = temperature(sys)
+		sys.steps += 1
+		push!(sys.tempPoints, T)
+		sys.tempAccumulator += T
+		sys.squareTempAccumulator += T^2
+
+		@static if @isdefined(render)
+			#np = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
+			#pos[] = np	
+			#yield()
+			for i in 1:length(pos)
+				pos[i] = (sys.x[2i-1], sys.x[2i])
+			end
+			#yield()
+			@show pos[]
+		end
+
+	end
+end
+
+function zero_total_momentum!(sys::ParticleSystem2D)
+	N = sys.numParticles
+	vx = sys.v[1:2:2N]
+	vy = sys.v[2:2:2N]
+
+	vx .-= mean(vx)
+	vy .-= mean(vy)
+
+	sys.v[1:2:2N] = vx
+	sys.v[2:2:2N] = vy
+end
+
+function reverse_time(sys::ParticleSystem2D)
+	global dt *= -1
+end
+
+function cool(sys::ParticleSystem2D, time::Float64=1.0)
+	steps = Int64(time/dt)
+	for step in 1:steps
+		verlet_step!(sys)
+		sys.v .*= (1.0 - dt)
+	end
+
+	reset_statistics!(sys)
+end
+
+# INITIAL CONDITIONS
+################################################################################
+
+function random_positions!(sys::ParticleSystem2D)
+	sys.x = rand(2*sys.numParticles) .* sys.length
+
+	sys.forceType = "lennardJones"
+	cool(sys)
+end
+
+function triangular_lattice_positions!(sys::ParticleSystem2D)
+	random_positions!(sys)
+	sys.v .+= rand(2*sys.numParticles) .- 0.5
+
+	cool(sys, 10.0)
+	sys.forceType = "lennardJones"
+end
+
+function rectangular_lattice_positions!(sys::ParticleSystem2D)
+	nx = Int64(sqrt(sys.numParticles))
+	ny = nx
+	dx = sys.length / nx
+	dy = sys.length / ny
+
+	for i in 0:(nx-1)
+		for j in 0:(ny-1)
+			sys.x[2*(i*ny+j)+1] = (i + 0.5) * dx
+			sys.x[2*(i*ny+j)+2] = (j + 0.5) * dy
+		end
+	end
+end
+
+function random_velocities!(sys::ParticleSystem2D)
+	sys.v = rand(2*sys.numParticles) .- 0.5
+	zero_total_momentum!(sys)
+	T = temperature(sys)
+	sys.v .*= sqrt(sys.initTemp/T)
+end
+
+# MEASUREMENTS
+################################################################################
+
+function kinetic_energy(sys::ParticleSystem2D)
+	return 0.5 * mag_sq(sys.v)
+end
+
+function potential_energy(sys::ParticleSystem2D)
+	return lennard_jones_potential(sys)
+end
+
+function lennard_jones_potential(sys::ParticleSystem2D)
 	tiny = 1.0e-40
-	#println(accel)
+	L = sys.length
+	halfL = 0.5 * L
+	N = sys.numParticles
+
+	x = sys.x[1:2:2N]
+	y = sys.x[2:2:2N]
+	U = 0.0
 
 	for i in 1:N
-		accel_i = zeros(D)
-		Threads.@threads for j in 1:N
-			if i != j
-				sep = minimum_separation_vector(
-					particle(i, position), particle(j, position), L
-					)
+		dx = minimum_image(x[i] .- x, L)
+		dy = minimum_image(y[i] .- y, L)
 
-	#			#println(typeof(sep)
-				sepSquared = mag_sq(sep) + tiny
-
-				magnitude = (1.0/mag(sep)) * 
-					(48.0 * sepSquared^(-6) - 24.0 * sepSquared^(-3))
-				direction = unit(sep)
-				accel_ij = magnitude .* direction
-				accel_i += accel_ij
-	
-#				println("i = ", i, "j = ", j)
-#				println(sep, ", ", sepSquared)
-#				println(magnitude)
-#				println(direction)
-#				println(accel_ij)
-#				println(accel_i)
-			end
-		end
-		particle(i, acceleration)[1] = accel_i[1]
-		particle(i, acceleration)[2] = accel_i[2]
+		r2inv = 1.0 / (dx.^2 .+ dy.^2 .+ tiny)
+		dU = r2inv.^6 .- r2inv.^3
+		dU[i] = 0.0	# no self interaction
+		U += sum(dU)
 	end
 
-	return acceleration
+	return 2.0 * U
 end
 
-function verlet_step!(state::Matrix{Float64}, dt::Float64, L::Float64)
-	acceleration = ljforce(position(state), L)
-
-	position(state) .+= velocity(state) .* dt .+ 0.5 * dt^2 .* acceleration
-	position(state) .% L
-	velocity(state) .+= 0.5 * dt .* (acceleration + ljforce(position(state), L))
+function energy(sys::ParticleSystem2D)
+	return potential_energy(sys) + kinetic_energy(sys)
 end
 
-function evolve!()
+function temperature(sys::ParticleSystem2D)
+	return kinetic_energy(sys) / sys.numParticles
 end
 
-function run!(sys::ParticleSystem, dt::Float64, tt::Float64=10.0)
-	numSteps = Int64(floor(tt/dt))
+# STATISTICS
+################################################################################
 
-#	statedata = [ sys.state ]
-#	tdata = 0:dt:tt
-#
-	for t in 1:150
-		verlet_step!(sys.state, dt, sys.L)
-		zero_total_momentum!(velocity(sys.state))
+function reset_statistics!(sys::ParticleSystem2D)
+	sys.steps = 0
+	sys.tempAccumulator = 0.0
+	sys.squareTempAccumulator = 0.0
+	sys.virialAccumulator = 0.0
+	sys.xPoints = []
+	sys.vPoints = []
+end
 
-		#s.t += dt
-		#push!(statedata, sys.state)
+function mean_temperature(sys::ParticleSystem2D)
+	return sys.tempAccumulator / sys.steps
+end
+
+function mean_square_temperature(sys::ParticleSystem2D)
+	return sys.squareTempAccumulator / sys.steps
+end
+
+function mean_pressure(sys::ParticleSystem2D)
+	# factor of half because force is calculated twice each step
+	meanVirial = 0.5 * sys.virialAccumulator / sys.steps
+	return 1.0 + 0.5 * meanVirial / (sys.numParticles * mean_temperature(sys))
+end
+
+function heat_capacity(sys::ParticleSystem2D)
+	meanTemperature = mean_temperature(sys)
+	meanSquareTemperature = mean_square_temperature(sys)
+	σ2 = meanSquareTemperature - meanTemperature^2
+	denom = 1.0 - σ2 * sys.numParticles / meanTemperature^2
+	return sys.numParticles / denom
+end
+
+function mean_energy(sys::ParticleSystem2D)
+	return mean(sys.energyPoints)
+end
+
+function std_energy(sys::ParticleSystem2D)
+	return std(sys.energyPoints)
+end
+
+# GRAPHS
+################################################################################
+
+function start_plot()
+	theme(:lime)
+	plot(size=(800,800), titlefontsize=28)
+end
+
+function plot_positions(sys::ParticleSystem2D)
+	N = sys.numParticles
+
+	start_plot()
+	scatter!(sys.x[1:2:2N], sys.x[2:2:2N], markersize=5.0,)
+	xlabel!("x")
+	ylabel!("y")
+	xlims!(0, sys.length)
+	ylims!(0, sys.length)
+end
+
+function plot_trajectories(sys::ParticleSystem2D, number::Int64=1)
+	N = sys.numParticles
+	#plot()
+end
+
+function plot_temperature(sys::ParticleSystem2D)
+	plot()
+	plot!(sys.tPoints, sys.tempPoints)
+	xlabel!("t")
+	ylabel!("T")
+end
+
+function plot_energy(sys::ParticleSystem2D)
+	plot()
+	plot!(sys.sampleTimePoints, sys.energyPoints)
+	xlabel!("t")
+	ylabel!("energy")
+	ylims!(minimum(sys.energyPoints) - 2, maximum(sys.energyPoints) + 2)
+end
+
+function velocity_histogram(sys::ParticleSystem2D)
+	plot()
+	histogram!(sys.vPoints, normalize=:pdf)
+	xlabel!("velocity")
+	ylabel!("probability")
+end
+
+function console_log(sys::ParticleSystem2D)
+	println(  "  num threads:		", Threads.nthreads(), "\n"),
+	println(
+		  "  time:			", sys.t, 
+		"\n  total energy:		", energy(sys), 
+		"\n  temperature:		", temperature(sys),
+		)
+
+	if sys.steps > 0
+		println(
+			"\n  mean energy:		", mean_energy(sys), 
+			"\n  standard dev:		", std_energy(sys),
+			"\n  C_V:			", heat_capacity(sys),
+			"\n  PV/NkT:			", mean_pressure(sys),
+			)
 	end
 
-	#xdata = [ statedata ]
-	#plot(sy
-	#println(statedata[1][1])
 end
 
-function plot_positions(sys::ParticleSystem)
-	N = sys.N
-	xdata = coordinate(1, position(sys.state))
-	ydata = coordinate(2, position(sys.state))
-	plot(size=(800,800))
-	scatter!(xdata, ydata)
-end
-
-
-sys = ParticleSystem(16, 2, 5.0, 1.0)
-
-initialize_positions_rectangular!(sys)
-initialize_velocities!(sys)
-zero_total_momentum!(velocity(sys.state))
-run!(sys, 0.001, 0.2)
-plot_positions(sys)
-
-#ljforce(position(sys.state), 5.0)
-#verlet_step!(sys.state, 0.01, 5.0)
-
-
-#accel = lennard_jones_force(sys)
+# RUN
+################################################################################
