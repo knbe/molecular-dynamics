@@ -4,8 +4,10 @@
 
 push!(LOAD_PATH, "./")
 using Statistics
-using Plots
 using Vectors
+
+using Plots
+using PlotThemes
 
 #@static if @isdefined(render)
 #	using GLMakie
@@ -82,19 +84,20 @@ end
 
 function minimum_image(x::Vector{Float64}, L::Float64)
 	halfL = 0.5 * L
-	return (x .+ halfL) .% L .- halfL
+	for i in 1:length(x)
+		if x[i] > halfL
+			x[i] -= L
+		elseif x[i] < -halfL
+			x[i] += L
+		end
+	end
+	#return (x .+ halfL) .% L .- halfL
+	return x
 end
 
 function force(sys::ParticleSystem2D)
-	# fairly sure this is more efficient than having a big old if statement
-#	@static if @isdefined(lennardJones)
-#		force, virial = lennardJonesForce(s)
-#		s.virialAccum += virial
-#		return force
-#	end
-	# add functionality for other forces
 	if sys.forceType == "lennardJones"
-		force, virial = lennard_jones_force(sys)
+		force, virial = lennard_jones_force2(sys)
 	elseif sys.forceType == "powerLaw"
 		force, virial = power_law_force(sys)
 	end
@@ -102,6 +105,112 @@ function force(sys::ParticleSystem2D)
 	sys.virialAccumulator += virial
 	return force
 end
+
+function minimum_separation_vector(p1, p2, L::Float64)
+	r12 = p2 .- p1 # vector from point p1 to point p2
+
+	for i in 1:length(r12)
+		if r12[i] > (L/2)
+			r12[i] -= L
+		elseif r12[i] < -(L/2)
+			r12[i] += L
+		end
+	end
+
+	return r12
+end
+
+function lennard_jones_force2(sys::ParticleSystem2D)
+	N = sys.numParticles
+	L = sys.length
+	tiny = 1.0e-40
+	virial = 0.0
+
+	x = sys.x[1:2:2N]
+	y = sys.x[2:2:2N]
+	force = zeros(2*N)
+
+	#minImg = minimumImage(s, x)
+	#println(minImg)
+	for i in 1:N
+		for j in (i+1):N
+			dx = minimum_image(x .- x[i], L)
+			dy = minimum_image(y .- y[i], L)
+
+			r2inv = 1.0 ./ (dx.^2 .+ dy.^2 .+ tiny)
+			f = 48.0 .* r2inv.^7 - 24.0 .* r2inv.^4
+			fx = dx .* f
+			fy = dy .* f
+
+			fx[i] = 0.0	# no self force
+			fy[i] = 0.0
+
+
+#			println("i = ", i, ", j = ", j)
+#			println(dx)
+#			println(dy)
+#			println(f)
+#			println(sum(fx))
+#			println(sum(fy))
+			#force[2*i-1] = sum(fx)
+			#force[2*i] = sum(fy)
+			#println(force)
+
+			virial += dot(fx,dx) + dot(fy,dy)
+		end
+	end
+
+	return force, (0.5 * virial)
+end
+
+function lennard_jones_force3(sys::ParticleSystem2D)
+	N = sys.numParticles
+	L = sys.length
+	tiny = 1.0e-40
+	virial = 0.0
+
+	x = sys.x[1:2:2N]
+	y = sys.x[2:2:2N]
+	force = zeros(2*N)
+
+	#minImg = minimumImage(s, x)
+	#println(minImg)
+	for i in 1:N
+		for j in (i+1):N
+
+			dx = x[i] - x[j]
+			if dx > (L/2)
+				dx -= L
+			elseif dx < -(L/2)
+				dx += L
+			end
+
+			dy = y[i] - y[j]
+			if dy > (L/2)
+				dy -= L
+			elseif dy < -(L/2)
+				dy += L
+			end
+
+			r2inv = 1.0 / (dx^2 + dy^2)
+			r6inv = r2inv^3
+			r8inv = r2inv * r6inv
+			c = 48.0 * r8inv * r6inv - 24.0 * r8inv
+			fx = dx * c
+			fy = dy * c
+
+			force[2*i-1] += fx
+			force[2*i] += fy
+			force[2*j-1] -= fx
+			force[2*j] -= fy
+
+			virial += fx*dx + fy*dy
+		end
+	end
+
+	return force, (0.5 * virial)
+end
+
 
 function lennard_jones_force(sys::ParticleSystem2D)
 	N = sys.numParticles
@@ -362,12 +471,20 @@ end
 # GRAPHS
 ################################################################################
 
+function start_plot()
+	theme(:lime)
+	plot(size=(800,800), titlefontsize=28)
+end
+
 function plot_positions(sys::ParticleSystem2D)
 	N = sys.numParticles
-	plot(size=(800,800))
-	scatter!(sys.x[1:2:2N], sys.x[2:2:2N])
+
+	start_plot()
+	scatter!(sys.x[1:2:2N], sys.x[2:2:2N], markersize=5.0,)
 	xlabel!("x")
 	ylabel!("y")
+	xlims!(0, sys.length)
+	ylims!(0, sys.length)
 end
 
 function plot_trajectories(sys::ParticleSystem2D, number::Int64=1)
@@ -387,7 +504,7 @@ function plot_energy(sys::ParticleSystem2D)
 	plot!(sys.sampleTimePoints, sys.energyPoints)
 	xlabel!("t")
 	ylabel!("energy")
-	#ylims!(-2,2)
+	ylims!(minimum(sys.energyPoints) - 2, maximum(sys.energyPoints) + 2)
 end
 
 function velocity_histogram(sys::ParticleSystem2D)
@@ -418,19 +535,22 @@ end
 # RUN
 ################################################################################
 
-sys = ParticleSystem2D(16)
+sys = ParticleSystem2D(64, 8.0, 1.0)
 #lennard_jones_force(sys)
 
 # equilibriation and statistics
-rectangular_lattice_positions!(sys)
+random_positions!(sys)
 random_velocities!(sys)
 console_log(sys)
-plot_positions(sys)
 
-evolve!(sys, 10.0)
+evolve!(sys, 1.0)
+console_log(sys)
+plot_positions(sys)
+plot_energy(sys)
+
+#a, b = lennard_jones_force2(sys)
+
 #reset_statistics!(sys)
 #evolve!(sys, 20.0)
-console_log(sys)
-plot_energy(sys)
+#plot_energy(sys)
 #plot_temperature(sys)
-#velocity_histogram(sys)
