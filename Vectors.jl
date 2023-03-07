@@ -16,7 +16,7 @@ function cross(v1::Vector{Float64}, v2::Vector{Float64})
 	return v3
 end
 
-function mag_sq(v::Vector{Float64})
+function mag_sq(v)
 	magSq = 0
 	for i in 1:length(v)
 		magSq += v[i] * v[i]
@@ -24,7 +24,7 @@ function mag_sq(v::Vector{Float64})
 	return magSq
 end
 
-function mag(v::Vector{Float64})
+function mag(v)
 	return sqrt(mag_sq(v))
 end
 
