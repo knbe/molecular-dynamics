@@ -64,24 +64,6 @@ end
 # FORCES
 ################################################################################
 
-function old_minimum_image(dx::Float64, dy::Float64, L::Float64)
-	#halfL = 0.5 * sys.length
-	#return (x .+ halfL) .% L .- halfL
-	if dx > halfL
-		dx -= L
-	elseif dx < -halfL
-		dx += L
-	end
-
-	if dy > halfL
-		dy -= L
-	elseif dy < -halfL
-		dy += L
-	end
-
-	return dx, dy
-end
-
 function minimum_image(x::Vector{Float64}, L::Float64)
 	halfL = 0.5 * L
 	for i in 1:length(x)
@@ -162,55 +144,6 @@ function lennard_jones_force2(sys::ParticleSystem2D)
 
 	return force, (0.5 * virial)
 end
-
-function lennard_jones_force3(sys::ParticleSystem2D)
-	N = sys.numParticles
-	L = sys.length
-	tiny = 1.0e-40
-	virial = 0.0
-
-	x = sys.x[1:2:2N]
-	y = sys.x[2:2:2N]
-	force = zeros(2*N)
-
-	#minImg = minimumImage(s, x)
-	#println(minImg)
-	for i in 1:N
-		for j in (i+1):N
-
-			dx = x[i] - x[j]
-			if dx > (L/2)
-				dx -= L
-			elseif dx < -(L/2)
-				dx += L
-			end
-
-			dy = y[i] - y[j]
-			if dy > (L/2)
-				dy -= L
-			elseif dy < -(L/2)
-				dy += L
-			end
-
-			r2inv = 1.0 / (dx^2 + dy^2)
-			r6inv = r2inv^3
-			r8inv = r2inv * r6inv
-			c = 48.0 * r8inv * r6inv - 24.0 * r8inv
-			fx = dx * c
-			fy = dy * c
-
-			force[2*i-1] += fx
-			force[2*i] += fy
-			force[2*j-1] -= fx
-			force[2*j] -= fy
-
-			virial += fx*dx + fy*dy
-		end
-	end
-
-	return force, (0.5 * virial)
-end
-
 
 function lennard_jones_force(sys::ParticleSystem2D)
 	N = sys.numParticles
