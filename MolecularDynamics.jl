@@ -137,7 +137,7 @@ function ljforce(position, L::Float64)
 
 	for i in 1:N
 		accel_i = zeros(D)
-		for j in 1:N
+		Threads.@threads for j in 1:N
 			if i != j
 				sep = minimum_separation_vector(
 					particle(i, position), particle(j, position), L

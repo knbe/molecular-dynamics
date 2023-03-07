@@ -115,7 +115,7 @@ function lennard_jones_force2(sys::ParticleSystem2D)
 	#minImg = minimumImage(s, x)
 	#println(minImg)
 	for i in 1:N
-		for j in (i+1):N
+		Threads.@threads for j in (i+1):N
 			dx = minimum_image(x .- x[i], L)
 			dy = minimum_image(y .- y[i], L)
 
@@ -265,7 +265,7 @@ function zero_total_momentum!(sys::ParticleSystem2D)
 end
 
 function reverse_time(sys::ParticleSystem2D)
-	dt = -dt
+	global dt *= -1
 end
 
 function cool(sys::ParticleSystem2D, time::Float64=1.0)
@@ -448,6 +448,7 @@ function velocity_histogram(sys::ParticleSystem2D)
 end
 
 function console_log(sys::ParticleSystem2D)
+	println(  "  num threads:		", Threads.nthreads(), "\n"),
 	println(
 		  "  time:			", sys.t, 
 		"\n  total energy:		", energy(sys), 
@@ -472,14 +473,14 @@ sys = ParticleSystem2D(64, 8.0, 1.0)
 #lennard_jones_force(sys)
 
 # equilibriation and statistics
-random_positions!(sys)
-random_velocities!(sys)
-console_log(sys)
-
-evolve!(sys, 1.0)
-console_log(sys)
-plot_positions(sys)
-plot_energy(sys)
+#random_positions!(sys)
+#random_velocities!(sys)
+#console_log(sys)
+#
+#evolve!(sys, 1.0)
+#console_log(sys)
+#plot_positions(sys)
+#plot_energy(sys)
 
 #a, b = lennard_jones_force2(sys)
 
@@ -487,3 +488,17 @@ plot_energy(sys)
 #evolve!(sys, 20.0)
 #plot_energy(sys)
 #plot_temperature(sys)
+
+# time reversal test
+#rectangular_lattice_positions!(sys)
+#random_velocities!(sys)
+#console_log(sys)
+#plot_positions(sys)
+#
+#@time begin
+#evolve!(sys, 1.0)
+#reverse_time(sys)
+#evolve!(sys, 1.0)
+#end
+#
+#plot_positions(sys)
