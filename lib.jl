@@ -230,20 +230,20 @@ end
 function evolve!(sys::ParticleSystem2D, time::Float64=10.0)
 	steps = Int64(abs(time/dt))
 
-	@static if @isdefined(render)
-		println("rendering")
-		pos = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
-		#posx = Observable{Vector{Float64}}(sys.x[1:2:2*sys.numParticles])
-		#posy = Observable{Vector{Float64}}(sys.x[2:2:2*sys.numParticles])
-		fontsize_theme = Theme(fontsize=40)
-		set_theme!(fontsize_theme)
-		fig = Figure(resolution=(800,800))
-		ax1 = Axis(fig[1,1])
-		#scatter!(ax1, pos, markersize=5.0)
-		GLMakie.scatter!(ax1, pos, markersize=20.0)
-		#limits!(ax1, 0, sys.length)
-		display(fig)
-	end
+#	@static if @isdefined(render)
+#		println("rendering")
+#		pos = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
+#		#posx = Observable{Vector{Float64}}(sys.x[1:2:2*sys.numParticles])
+#		#posy = Observable{Vector{Float64}}(sys.x[2:2:2*sys.numParticles])
+#		fontsize_theme = Theme(fontsize=40)
+#		set_theme!(fontsize_theme)
+#		fig = Figure(resolution=(800,800))
+#		ax1 = Axis(fig[1,1])
+#		#scatter!(ax1, pos, markersize=5.0)
+#		GLMakie.scatter!(ax1, pos, markersize=20.0)
+#		#limits!(ax1, 0, sys.length)
+#		display(fig)
+#	end
 
 	for step in 1:steps
 		verlet_step!(sys)
@@ -266,16 +266,16 @@ function evolve!(sys::ParticleSystem2D, time::Float64=10.0)
 		sys.tempAccumulator += T
 		sys.squareTempAccumulator += T^2
 
-		@static if @isdefined(render)
-			#np = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
-			#pos[] = np	
-			#yield()
-			for i in 1:length(pos)
-				pos[i] = (sys.x[2i-1], sys.x[2i])
-			end
-			#yield()
-			@show pos[]
-		end
+#		@static if @isdefined(render)
+#			#np = [ (sys.x[2i-1], sys.x[2i]) for i in 1:sys.numParticles ]
+#			#pos[] = np	
+#			#yield()
+#			for i in 1:length(pos)
+#				pos[i] = (sys.x[2i-1], sys.x[2i])
+#			end
+#			#yield()
+#			@show pos[]
+#		end
 
 	end
 end
@@ -497,17 +497,15 @@ end
 # RUN
 ################################################################################
 
-sys = ParticleSystem2D(16, 4.0, 1.0)
+sys = ParticleSystem2D(64, 8.0, 1.0)
 #lennard_jones_force(sys)
 
-render = 1
-
 # equilibriation and statistics
-random_positions!(sys)
-random_velocities!(sys)
-console_log(sys)
+#random_positions!(sys)
+#random_velocities!(sys)
+#console_log(sys)
 
-evolve!(sys, 1.0)
+#evolve!(sys, 1.0)
 #console_log(sys)
 #plot_positions(sys)
 #plot_energy(sys)
@@ -520,15 +518,13 @@ evolve!(sys, 1.0)
 #plot_temperature(sys)
 
 # time reversal test
-#rectangular_lattice_positions!(sys)
-#random_velocities!(sys)
-#console_log(sys)
+rectangular_lattice_positions!(sys)
+random_velocities!(sys)
+console_log(sys)
 #plot_positions(sys)
 #
-#@time begin
-#evolve!(sys, 1.0)
-#reverse_time(sys)
-#evolve!(sys, 1.0)
-#end
+@time begin
+evolve!(sys, 1.0)
+end
 #
-#plot_positions(sys)
+plot_positions(sys)
