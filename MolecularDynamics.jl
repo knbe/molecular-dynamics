@@ -2,7 +2,6 @@
 
 push!(LOAD_PATH, "./")
 using Statistics
-using Vectors
 using Plots
 
 dt = 0.001
@@ -128,8 +127,8 @@ function lennard_jones_force(state::Vector{Float64}, L::Float64)
 	x = xcomponent(positions(state))
 	y = ycomponent(positions(state))
 
-	for i in 1:N
-		Threads.@threads for j in (i+1):N
+	Threads.@threads for i in 1:N
+		for j in (i+1):N
 			dx = minimum_image(x .- x[i], L)
 			dy = minimum_image(y .- y[i], L)
 
@@ -232,7 +231,7 @@ end
 ################################################################################
 
 function kinetic_energy(state::Vector{Float64})
-	return 0.5 * mag_sq(velocities(state))
+	return 0.5 * sum(velocities(state) .* velocities(state))
 end
 
 function potential_energy(state::Vector{Float64}, L::Float64)
@@ -270,15 +269,15 @@ end
 function mean_pressure(sys::ParticleSystem)
 	# factor of half because force is calculated twice each step
 	meanVirial = 0.5 * sys.virialAccumulator / sys.steps
-	return 1.0 + 0.5 * meanVirial / (sys.numParticles * mean_temperature(sys))
+	return 1.0 + 0.5 * meanVirial / (sys.N * mean_temperature(sys))
 end
 
 function heat_capacity(sys::ParticleSystem)
 	meanTemperature = mean_temperature(sys)
 	meanSquareTemperature = mean_square_temperature(sys)
 	σ2 = meanSquareTemperature - meanTemperature^2
-	denom = 1.0 - σ2 * sys.numParticles / meanTemperature^2
-	return sys.numParticles / denom
+	denom = 1.0 - σ2 * sys.N / meanTemperature^2
+	return sys.N / denom
 end
 
 function mean_energy(sys::ParticleSystem)
@@ -312,18 +311,39 @@ function plot_positions(sys::ParticleSystem)
 	ylims!(0, sys.L)
 end
 
+function plot_trajectories(sys::ParticleSystem, number::Int64=1)
+	N = sys.N
+	#plot()
+end
 
+function plot_temperature(sys::ParticleSystem)
+	plot()
+	plot!(sys.tPoints, sys.tempPoints)
+	xlabel!("t")
+	ylabel!("T")
+end
 
-# RUN
-################################################################################
+function plot_energy(sys::ParticleSystem)
+	plot()
+	plot!(sys.sampleTimePoints, sys.energyPoints)
+	xlabel!("t")
+	ylabel!("energy")
+	ylims!(minimum(sys.energyPoints) - 2, maximum(sys.energyPoints) + 2)
+end
 
+function velocity_histogram(sys::ParticleSystem)
+	plot()
+	histogram!(sys.vPoints, normalize=:pdf, bins = -2.0:0.2:2.0)
+	xlabel!("velocity")
+	ylabel!("probability")
+end
 
 function console_log(sys::ParticleSystem)
 	println(  "  num threads:		", Threads.nthreads(), "\n"),
 	println(
 		  "  time:			", sys.t, 
-		"\n  total energy:		", energy(sys), 
-		"\n  temperature:		", temperature(sys),
+		"\n  total energy:		", energy(sys.state, sys.L), 
+		"\n  temperature:		", temperature(sys.state),
 		)
 
 	if sys.steps > 0
@@ -337,22 +357,32 @@ function console_log(sys::ParticleSystem)
 
 end
 
+# RUN
+################################################################################
+
+
 sys = ParticleSystem(64, 8.0, 1.0)
 
 # TIME REVERSAL TEST
-#rectangular_lattice_positions!(sys)
-#random_velocities!(sys)
-#evolve!(sys, 1.0)
-#reverse_time()
-#evolve!(sys, 1.0)
-#plot_positions(sys)
-
-# EQUILIBRIATION AND STATISTICS
-random_positions!(sys)
-random_velocities!(sys)
-
-@time begin
-evolve!(sys, 1.0)
+function demo1()
+	rectangular_lattice_positions!(sys)
+	random_velocities!(sys)
+	evolve!(sys, 1.0)
+	reverse_time()
+	evolve!(sys, 1.0)
+	console_log(sys)
+	plot_positions(sys)
 end
 
-plot_positions(sys)
+# EQUILIBRIATION AND STATISTICS
+function demo2()
+	random_positions!(sys)
+	random_velocities!(sys)
+	evolve!(sys, 1.0)
+	console_log(sys)
+	p1 = plot_positions(sys)
+	p2 = plot_energy(sys)
+	p3 = velocity_histogram(sys)
+	plot(p1, p2, p3)
+end
+
