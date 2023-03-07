@@ -102,6 +102,7 @@ function minimum_image(x::Vector{Float64}, L::Float64)
 			x[i] += L
 		end
 	end
+	#return (x .+ halfL) .% L .- halfL
 	return x
 end
 
@@ -117,6 +118,7 @@ function force(state::Vector{Float64}, L::Float64)
 end
 
 function lennard_jones_force(state::Vector{Float64}, L::Float64)
+
 	N = numParticles(state)
 	tiny = 1.0e-40
 	virial = 0.0
@@ -310,6 +312,10 @@ function plot_positions(sys::ParticleSystem)
 end
 
 function plot_trajectories(sys::ParticleSystem, number::Int64=1)
+	N = sys.N
+
+	#initialize_plot()
+	
 end
 
 function plot_temperature(sys::ParticleSystem)
@@ -359,7 +365,7 @@ end
 
 sys = ParticleSystem(64, 8.0, 1.0)
 
-# time reversal
+# TIME REVERSAL TEST
 function demo1()
 	rectangular_lattice_positions!(sys)
 	random_velocities!(sys)
@@ -370,7 +376,7 @@ function demo1()
 	plot_positions(sys)
 end
 
-# equilibration
+# EQUILIBRIATION AND STATISTICS
 function demo2()
 	random_positions!(sys)
 	random_velocities!(sys)
@@ -378,7 +384,6 @@ function demo2()
 	console_log(sys)
 	p1 = plot_positions(sys)
 	p2 = plot_energy(sys)
-	#p3 = plot_temperature(sys)
-	p4 = velocity_histogram(sys)
-	plot(p1, p2, p4)
+	p3 = velocity_histogram(sys)
+	plot(p1, p2, p3)
 end
