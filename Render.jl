@@ -1,6 +1,10 @@
 module Render
 	
 using GLMakie
+using ParticleSystems
+
+#ptx = Observable
+#pty = []
 
 function start_render(sys::ParticleSystem)
 	ptx = Observable( sys.state[1:2:2*sys.N] )
@@ -28,5 +32,8 @@ function update_render(sys::ParticleSystem)
 	pty[] = sys.state[2:2:2*sys.N]
 	yield()
 end
+
+export start_render, 
+	update_render
 
 end
