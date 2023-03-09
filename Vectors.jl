@@ -16,15 +16,11 @@ function cross(v1::Vector{Float64}, v2::Vector{Float64})
 	return v3
 end
 
-function mag_sq(v)
-	magSq = 0
-	for i in 1:length(v)
-		magSq += v[i] * v[i]
-	end
-	return magSq
+function mag_sq(v::Vector{Float64})
+	return sum(v[i]^2 for i = 1:length(v))
 end
 
-function mag(v)
+function mag(v::Vector{Float64})
 	return sqrt(mag_sq(v))
 end
 

@@ -1,53 +1,32 @@
 module Render
+	
+using GLMakie
 
-@static if @isdefined(graph)
-	using Plots
-end
-@static if @isdefined(render)
-	using GLMakie
-end
+function start_render(sys::ParticleSystem)
+	ptx = Observable( sys.state[1:2:2*sys.N] )
+	pty = Observable( sys.state[2:2:2*sys.N] )
 
-function start_plot()
-	theme(:lime)
-	plot(size=(800,800), titlefontsize=28)
-end
+	fontsize_theme = Theme(fontsize=40)
+	set_theme!(fontsize_theme)
+	fig = Figure(resolution=(600,400))
+	ax1 = Axis(fig[1,1], xlabel = "x", ylabel = "y")
 
-function plot_positions(sys::ParticleSystem)
-	N = sys.numParticles
-
-	start_plot()
-	scatter!(sys.x[1:2:2N], sys.x[2:2:2N], markersize=5.0,)
-	xlabel!("x")
-	ylabel!("y")
-	xlims!(0, sys.length)
-	ylims!(0, sys.length)
-end
-
-function plot_trajectories(sys::ParticleSystem, number::Int64=1)
-	N = sys.numParticles
-	#plot()
+	for n = 1:sys.N
+		GLMakie.scatter!(
+			ax1, 
+			ptx, 
+			pty, 
+			markersize=40.0
+		)
+	end
+	limits!(ax1, 0, sys.L, 0, sys.L)
+	display(fig)
 end
 
-function plot_temperature(sys::ParticleSystem)
-	plot()
-	plot!(sys.tPoints, sys.tempPoints)
-	xlabel!("t")
-	ylabel!("T")
-end
-
-function plot_energy(sys::ParticleSystem)
-	plot()
-	plot!(sys.sampleTimePoints, sys.energyPoints)
-	xlabel!("t")
-	ylabel!("energy")
-	ylims!(minimum(sys.energyPoints) - 2, maximum(sys.energyPoints) + 2)
-end
-
-function velocity_histogram(sys::ParticleSystem)
-	plot()
-	histogram!(sys.vPoints, normalize=:pdf)
-	xlabel!("velocity")
-	ylabel!("probability")
+function update_render(sys::ParticleSystem)
+	ptx[] = sys.state[1:2:2*sys.N]
+	pty[] = sys.state[2:2:2*sys.N]
+	yield()
 end
 
 end
