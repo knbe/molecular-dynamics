@@ -1,10 +1,7 @@
-# molecular dynamics in 2d.
-# usage: 
+# molecular dynamics 2d.
 
 using Statistics
 using Plots
-
-const global sampleInterval::Int64 = 100
 
 mutable struct ParticleSystem
 	N::Int64			# number of particles
@@ -14,6 +11,7 @@ mutable struct ParticleSystem
 	dt::Float64			# time step
 	state::Vector{Float64}		# state space array
 	steps::Int64			# number of steps
+	sampleInterval::Int64		# interval for sampling data
 	timePoints::Vector{Float64}	# array of sampled time points
 	energyPoints::Vector{Float64}	# array of sampled energy values
 	tempPoints::Vector{Float64}	# array of sampled temperature values
@@ -32,7 +30,8 @@ function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 	steps = 0
 	timePoints = Float64[]
 	energyPoints = Float64[]
-	tempPoints = Float64[ T₀ ]
+	sampleInterval = 100
+	tempPoints = Float64[]
 	tempAccumulator = 0.0
 	squareTempAccumulator = 0.0
 	virialAccumulator = 0.0
@@ -48,6 +47,7 @@ function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 		dt, 
 		state, 
 		steps, 
+		sampleInterval,
 		timePoints, 
 		energyPoints, 
 		tempPoints, 
@@ -67,38 +67,43 @@ end
 @views ycomponent(vector) = vector[2:2:end]
 @views particle(n, vector) = [ vector[2n-1], vector[2n] ]
 
-# ADDITIONAL FUNCTIONS
-
-function dot(v1::Vector{Float64}, v2::Vector{Float64})
-	return sum(v1 .* v2)
-end
-
 # INITIALIZATION
 ################################################################################
 
-function random_positions!(sys::ParticleSystem)
+function set_random_positions!(sys::ParticleSystem)
+	println("\tposition configuration: random")
+
 	positions(sys.state) .= rand(2*sys.N) .* sys.L
 	cool!(sys)
 end
 
-function triangular_lattice_positions!(sys::ParticleSystem)
+function set_triangular_lattice_positions!(sys::ParticleSystem)
 end
 
-function rectangular_lattice_positions!(sys::ParticleSystem)
-	n = Int64(sqrt(sys.N))	# num lattice points per axis
-	ny = nx			# square lattice
-	ax = sys.L / nx		# lattice spacing x
-	ay = sys.L / ny		# lattice spacing y
+function set_square_lattice_positions!(sys::ParticleSystem)
+	println("\tposition configuration: square lattice")
 
-	for i in 0:(nx-1)
-		for j in 0:(ny-1)
-			sys.state[2*(i*ny+j)+1] = (i + 0.5) * ax
-			sys.state[2*(i*ny+j)+2] = (j + 0.5) * ay
+	n = Int64(floor(sqrt(sys.N))) # num lattice points per axis
+	latticeSpacing = sys.L / n
+	
+	if sys.N != n^2
+		println("\t\toops... your chosen N=$(sys.N) is not a square number") 
+		println("\t\t-> resetting N to $(n^2).")
+		sys.N = n^2
+		sys.state = zeros(4 * sys.N)
+	end
+
+	for i in 0:(n-1)
+		for j in 0:(n-1)
+			sys.state[2*(i*n+j)+1] = (i + 0.5) * latticeSpacing
+			sys.state[2*(i*n+j)+2] = (j + 0.5) * latticeSpacing
 		end
 	end
 end
 
-function random_velocities!(sys::ParticleSystem)
+function set_random_velocities!(sys::ParticleSystem)
+	println("\tvelocity configuration: random")
+
 	velocities(sys.state) .= rand(2*sys.N) .- 0.5
 	zero_total_momentum!(sys)
 	velocities(sys.state) .*= sqrt(sys.T₀/temperature(sys))
@@ -115,26 +120,13 @@ end
 # FORCES
 ################################################################################
 
-#function minimum_image(x::Vector{Float64}, L::Float64)
-#	halfL = 0.5 * L
-#	for i in 1:length(x)
-#		if x[i] > halfL
-#			x[i] -= L
-#		elseif x[i] < -halfL
-#			x[i] += L
-#		end
-#	end
-#	return x
-#end
-
 function force(sys::ParticleSystem)
-#	if sys.forceType == "lennardJones"
-#		force, virial = lennard_jones_force(sys)
-#	elseif sys.forceType == "powerLaw"
-#		force, virial = power_law_force(sys)
-#	end
+	if sys.forceType == "lennardJones"
+		force, virial = lennard_jones_force(sys)
+	elseif sys.forceType == "powerLaw"
+		force, virial = power_law_force(sys)
+	end
 
-	force, virial = lennard_jones_force(sys)
 	sys.virialAccumulator += virial
 
 	return force
@@ -205,6 +197,13 @@ function keep_particles_in_box!(sys::ParticleSystem)
 			positions(sys.state)[i] += sys.L
 		end
 	end
+
+#	# alternatively, using the ternary operator 
+#	for i in 1:(2 * sys.N)
+#		positions(sys.state)[i] < 0.0 ?  
+#		positions(sys.state)[i] % sys.L + sys.L : 
+#		positions(sys.state)[i] % sys.L
+#	end
 end
 
 function verlet_step!(sys::ParticleSystem)
@@ -228,7 +227,7 @@ function evolve!(sys::ParticleSystem, runtime::Float64=10.0)
 		verlet_step!(sys)
 		zero_total_momentum!(sys)
 
-		if (step % sampleInterval == 1)
+		if (step % sys.sampleInterval == 1)
 			push!(sys.timePoints, sys.t)
 			push!(sys.energyPoints, energy(sys))
 			push!(sys.xPoints, positions(sys.state))
@@ -244,7 +243,6 @@ function evolve!(sys::ParticleSystem, runtime::Float64=10.0)
 		sys.steps += 1
 	end
 	println("done.") 
-	print_data(sys)
 end
 
 function reverse_time!(sys)
@@ -322,14 +320,21 @@ function std_energy(sys::ParticleSystem)
 	return std(sys.energyPoints)
 end
 
+# MATH / ADDITIONAL FUNCTIONS
+################################################################################
+
+function dot(v1::Vector{Float64}, v2::Vector{Float64})
+	return sum(v1 .* v2)
+end
+
 # GRAPHS
 ################################################################################
 
 function initialize_plot()
 	plot(
 		size=(800,800), 
-		titlefontsize=16, 
-		guidefontsize=16,
+		titlefontsize=12, 
+		guidefontsize=12,
 	)
 end
 
@@ -338,173 +343,194 @@ function plot_positions(sys::ParticleSystem)
 	scatter!(
 		xcomponent(positions(sys.state)), 
 		ycomponent(positions(sys.state)), 
-		markersize = 5.0,
+		markersize = 3.0,
 		grid = true,
-		widtn = true,
+		#widen = true,
+		framestyle = :box,
+		legend = false,
 		)
 	xlims!(0, sys.L)
 	ylims!(0, sys.L)
 	xlabel!("x")
 	ylabel!("y")
-	title!("particle positions at time t=$(sys.t)")
+	title!("positions at t=$(round(sys.t, digits=4))")
 end
 
-function plot_trajectories(sys::ParticleSystem, number::Int64=1)
-	#N = sys.N
-	#plot()
+function plot_trajectories(sys::ParticleSystem, particles::Vector{Int64}=[ 1 ])
+	initialize_plot()
+	scatter!(
+		xcomponent(positions(sys.state)), 
+		ycomponent(positions(sys.state)), 
+		markersize = 3.0,
+		grid = true,
+		framestyle = :box,
+		label = "",
+		widen = false,
+		)
+	for n in particles
+		xdata = [ sys.xPoints[i][2n-1] for i in 1:length(sys.xPoints) ]
+		ydata = [ sys.xPoints[i][2n] for i in 1:length(sys.xPoints) ]
+		# plot trajectory line for nth particle
+		plot!(
+			xdata, 
+			ydata,
+			linecolor = n,
+			label = "particle $n trajectory",
+			widen = false,
+		)
+		# plot initial position for nth particle
+		scatter!(
+			[ sys.xPoints[1][2n-1] ], 
+			[ sys.xPoints[1][2n] ],
+			markersize = 5.0, 
+			markeralpha = 0.5,
+			markercolor = n,
+			label = "particle $n initial position",
+			widen = false,
+		)
+		# plot final position for nth particle
+		scatter!(
+			[ sys.xPoints[end][2n-1] ], 
+			[ sys.xPoints[end][2n] ],
+			markersize = 5.0, 
+			markeralpha = 1.0,
+			markercolor = n,
+			label = "particle $n current position",
+			widen = false,
+		)
+	end
+	title!("positions at time t=$(round(sys.t, digits=4)); \
+		\ntrajectories=$(particles)")
+	plot!()
 end
 
 function plot_temperature(sys::ParticleSystem)
-	plot()
-	plot!(sys.tPoints, sys.tempPoints)
+	initialize_plot()
+	plot!(
+		sys.timePoints, 
+		sys.tempPoints,
+		#widen = true,
+	)
+	ylims!(
+		mean(sys.tempPoints) - std(sys.tempPoints) * 20, 
+		mean(sys.tempPoints) + std(sys.tempPoints) * 20, 
+	)
 	xlabel!("t")
-	ylabel!("T")
+	ylabel!("T(t)")
+	title!("temperature vs time")
+
 end
 
 function plot_energy(sys::ParticleSystem)
-	plot()
-	plot!(sys.sampleTimePoints, sys.energyPoints)
+	initialize_plot()
+	plot!(
+		sys.timePoints, 
+		sys.energyPoints,
+		#widen = true,
+	)
+	ylims!(
+		mean(sys.energyPoints) - 1, 
+		mean(sys.energyPoints) + 1
+	)
 	xlabel!("t")
-	ylabel!("energy")
-	ylims!(minimum(sys.energyPoints) - 2, maximum(sys.energyPoints) + 2)
+	ylabel!("E(t)")
+	title!("energy vs time")
 end
 
-function velocity_histogram(sys::ParticleSystem)
-	plot()
-	histogram!(sys.vPoints, normalize=:pdf, bins = -2.0:0.2:2.0)
-	xlabel!("velocity")
-	ylabel!("probability")
+function plot_velocity_histogram(sys::ParticleSystem)
+	initialize_plot()
+	histogram!(
+		sys.vPoints, 
+		normalize = :pdf, 
+		bins = -2.0:0.2:2.0,
+		legend = :false,
+	)
+	xlabel!("v")
+	title!("velocity histogram")
 end
 
-# CONSOLE PRINT/DEBUGGING
+# CONSOLE PRINT DATA
 ################################################################################
 
-function print_init_message(sys::ParticleSystem)
-	println("\nmolecular dynamics.")
-	println("number of threads: ", Threads.nthreads()),
-
+function print_system_parameters(sys::ParticleSystem)
+	println("\nmolecular dynamics!")
+	println("number of threads: ", Threads.nthreads())
 	println("\nsystem parameters:")
 	println("\tN =  $(sys.N)   (number of particles)")
 	println("\tL =  $(sys.L)   (side length of square box)")
 	println("\tDT = $(sys.dt)  (time step)")
+end
 
-	println("\ninitial conditions:")
-	println("\ttime:            $(sys.t)")
-	println("\tenergy:          $(energy(sys))")
-	println("\tkinetic energy:  $(kinetic_energy(sys))")
-	println("\ttemperature:     $(sys.T₀)")
+function print_system_data(sys::ParticleSystem)
+	println("\nsystem data at time t=$(round(sys.t, digits=4))")
+
+	if sys.steps == 0
+		println("\ttemperature:     $(sys.T₀)")
+		println("\tenergy:          $(energy(sys))")
+	else
+		println("\tsteps evolved:   $(sys.steps)")
+		println("\ttemperature:     $(sys.T₀)")
+		println("\tenergy:          $(energy(sys))")
+		println("\tmean energy:     $(mean_energy(sys))")
+		println("\tstd energy:      $(std_energy(sys))")
+		println("\theat capacity:   $(heat_capacity(sys))")
+		println("\tPV/NkT:          $(mean_pressure(sys))")
+	end
 end
 
 function print_evolution_message(runtime, numsteps)
 	println("\nevolving...")
-	#println("\trun time: $runtime")
-	#println("\tnum steps: $numsteps")
 end
 
-function print_data(sys::ParticleSystem)
-	println("\nmeasurements:")
-	println("\ttime:            $(sys.t)")
-	println("\tsteps evolved:   $(sys.steps)")
-	println("\tenergy:          $(energy(sys))")
-	println("\tkinetic energy:  $(kinetic_energy(sys))")
-	println("\tmean energy:     $(mean_energy(sys))")
-	println("\tstd energy:      $(std_energy(sys))")
-	println("\ttemperature:     $(temperature(sys))")
-	println("\theat capacity:   $(heat_capacity(sys))")
-	println("\tPV/NkT:          $(mean_pressure(sys))")
-end
-
-# RUN
+# DEMOS
 ################################################################################
 
 
-#sys = ParticleSystem(64, 8.0, 1.0)
-
-#function plot_lj_potential(ϵ=1.0, σ=1.0)
-#	r = Vector{Float64}(0.1:0.01:10.0)
-#	U = ljU.(r, ϵ=ϵ, σ=σ)
-#	initialize_plot()
-#	plot!(r,U)
-#	xlims!(0,10)
-#	ylims!(-ϵ-1, 30)
-#	title!("LJ potential with ϵ=$ϵ, σ=$σ")
-#	xlabel!("r")
-#	ylabel!("U(r)")
-#	plot!(
-#		[2.5σ, 2.5σ], [-ϵ-1,60], 
-#		linestyle = :dot, 
-#		label = "2.5σ", 
-#	)
-#end
-
-#function demo_0()
-#	sys = ParticleSystem(10000, 100.0, 1.0)
-#	rectangular_lattice_positions!(sys)
-#	random_velocities!(sys)
-#
-#	println("ljp1")
-#	@time begin
-#	U = lennard_jones_potential(sys.state, sys.L)
-#	println(U)
-#	end
-#
-#	println("\nljp2")
-#	@time begin
-#	U2 = ljp2(sys)
-#	end
-#	println(U2)
-#
-#	println("\nljp3")
-#	@time begin
-#	U3 = ljp3(sys)
-#	end
-#	println(U3)
-#end
-
-#sys = ParticleSystem(16, 100.0, 1.0)
-#rectangular_lattice_positions!(sys)
-#random_velocities!(sys)
-
-
-function testlj()
-	rectangular_lattice_positions!(sys)
-	random_velocities!(sys)
-	lennard_jones_potential2(sys)
-	evolve!(sys, 1.0)
-end
-
-sys = ParticleSystem(64, 130.0, 1.0)
-
-# DEMO 0: EQUILIBRIATE
+# DEMO 0: APPROACH TO EQUILIBRIUM
 function demo_0()
-	rectangular_lattice_positions!(sys)
-	random_velocities!(sys)
-	print_init_message(sys)
+	sys = ParticleSystem(64, 120.0, 1.0)
+	print_system_parameters(sys)
 
-	evolve!(sys, 10.0)
-	plot_positions(sys)
+	set_square_lattice_positions!(sys)
+	set_random_velocities!(sys)
+	print_system_data(sys)
+	p1 = plot_positions(sys)
+
+	evolve!(sys, 40.0)
+	print_system_data(sys)
+
+	p2 = plot_trajectories(sys, [ 1, 2, 3, 4, 5 ])
+	p3 = plot_energy(sys)
+	p4 = plot_temperature(sys)
+
+	plot(
+		p1, p2, p3, p4,
+		layout = grid(2,2, heights=[0.7,0.3]),
+		size = (1200,800)
+	)
 end
 
 # DEMO 1: TIME REVERSAL TEST
 function demo_1()
-	rectangular_lattice_positions!(sys)
-	random_velocities!(sys)
-	print_init_message(sys)
+	sys = ParticleSystem(64, 120.0, 1.0)
+	print_system_parameters(sys)
 
-	evolve!(sys, 10.0)
-	reverse_time(sys)
-	evolve!(sys, 10.0)
-	plot_positions(sys)
-end
-
-# EQUILIBRIATION AND STATISTICS
-function demo2()
-	random_positions!(sys)
-	random_velocities!(sys)
-	evolve!(sys, 1.0)
-	console_log(sys)
+	set_square_lattice_positions!(sys)
+	set_random_velocities!(sys)
+	print_system_data(sys)
 	p1 = plot_positions(sys)
-	p2 = plot_energy(sys)
-	p3 = velocity_histogram(sys)
-	plot(p1, p2, p3)
+
+	evolve!(sys, 50.0)
+	p2 = plot_trajectories(sys, [1, 3, 6, 9, 12, 15, 18, 21 ])
+
+	reverse_time!(sys)
+	evolve!(sys, 50.0)
+	print_system_data(sys)
+	p3 = plot_trajectories(sys, [1, 3, 6, 9, 12, 15, 18, 21 ])
+
+	plot(
+		p1, p2, p3,
+		layout = (1,3),
+		size = (1800,600)
+	)
 end
