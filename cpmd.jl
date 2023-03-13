@@ -12,14 +12,14 @@ mutable struct ParticleSystem
 	state::Vector{Float64}		# state space array
 	steps::Int64			# number of steps
 	sampleInterval::Int64		# interval for sampling data
-	timePoints::Vector{Float64}	# array of sampled time points
-	energyPoints::Vector{Float64}	# array of sampled energy values
-	tempPoints::Vector{Float64}	# array of sampled temperature values
+	timeData::Vector{Float64}	# array of sampled time points
+	energyData::Vector{Float64}	# array of sampled energy values
+	tempData::Vector{Float64}	# array of sampled temperature values
 	tempAccumulator::Float64	# temperature accumulator
 	squareTempAccumulator::Float64	# T^2 accumulator
 	virialAccumulator::Float64	# virial accumulator
-	xPoints::Vector{Vector{Float64}} # array of sampled position data
-	vPoints::Vector{Vector{Float64}} # array of sampled velocity data
+	xData::Vector{Vector{Float64}} # array of sampled position data
+	vData::Vector{Vector{Float64}} # array of sampled velocity data
 	forceType::String		# force
 end
 
@@ -28,15 +28,15 @@ function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 	dt = 0.001
 	state = zeros(4N) # state space array, [x1, y1, x2, y2, ..., vx1, vy1, ...]
 	steps = 0
-	timePoints = Float64[]
-	energyPoints = Float64[]
+	timeData = Float64[]
+	energyData = Float64[]
 	sampleInterval = 100
-	tempPoints = Float64[]
+	tempData = Float64[]
 	tempAccumulator = 0.0
 	squareTempAccumulator = 0.0
 	virialAccumulator = 0.0
-	xPoints = Vector{Float64}[]
-	vPoints = Vector{Float64}[]
+	xData = Vector{Float64}[]
+	vData = Vector{Float64}[]
 	forceType = "lennardJones"
 
 	return ParticleSystem(
@@ -48,14 +48,14 @@ function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 		state, 
 		steps, 
 		sampleInterval,
-		timePoints, 
-		energyPoints, 
-		tempPoints, 
+		timeData, 
+		energyData, 
+		tempData, 
 		tempAccumulator, 
 		squareTempAccumulator, 
 		virialAccumulator, 
-		xPoints, 
-		vPoints, 
+		xData, 
+		vData, 
 		forceType
 	)
 end
@@ -98,6 +98,14 @@ function set_square_lattice_positions!(sys::ParticleSystem)
 			sys.state[2*(i*n+j)+1] = (i + 0.5) * latticeSpacing
 			sys.state[2*(i*n+j)+2] = (j + 0.5) * latticeSpacing
 		end
+	end
+end
+
+function add_position_jitter!(sys::ParticleSystem)
+	println("\tadding random jitter to particle positions")
+
+	for i = 1:length(positions(sys.state))
+		sys.state[i] += rand() - 0.5
 	end
 end
 
@@ -228,13 +236,13 @@ function evolve!(sys::ParticleSystem, runtime::Float64=10.0)
 		zero_total_momentum!(sys)
 
 		if (step % sys.sampleInterval == 1)
-			push!(sys.timePoints, sys.t)
-			push!(sys.energyPoints, energy(sys))
-			push!(sys.xPoints, positions(sys.state))
-			push!(sys.vPoints, velocities(sys.state))
+			push!(sys.timeData, sys.t)
+			push!(sys.energyData, energy(sys))
+			push!(sys.xData, positions(sys.state))
+			push!(sys.vData, velocities(sys.state))
 
 			T = temperature(sys)
-			push!(sys.tempPoints, T)
+			push!(sys.tempData, T)
 			sys.tempAccumulator += T
 			sys.squareTempAccumulator += T^2
 		end
@@ -286,8 +294,8 @@ function reset_statistics!(sys::ParticleSystem)
 	sys.tempAccumulator = 0.0
 	sys.squareTempAccumulator = 0.0
 	sys.virialAccumulator = 0.0
-	sys.xPoints = []
-	sys.vPoints = []
+	sys.xData = []
+	sys.vData = []
 end
 
 function mean_temperature(sys::ParticleSystem)
@@ -313,11 +321,11 @@ function heat_capacity(sys::ParticleSystem)
 end
 
 function mean_energy(sys::ParticleSystem)
-	return mean(sys.energyPoints)
+	return mean(sys.energyData)
 end
 
 function std_energy(sys::ParticleSystem)
-	return std(sys.energyPoints)
+	return std(sys.energyData)
 end
 
 # MATH / ADDITIONAL FUNCTIONS
@@ -375,8 +383,8 @@ function plot_trajectories(sys::ParticleSystem, particles::Vector{Int64}=[ 1 ])
 	end
 
 	for n in collect(particles)
-		xdata = [ sys.xPoints[i][2n-1] for i in 1:length(sys.xPoints) ]
-		ydata = [ sys.xPoints[i][2n] for i in 1:length(sys.xPoints) ]
+		xdata = [ sys.xData[i][2n-1] for i in 1:length(sys.xData) ]
+		ydata = [ sys.xData[i][2n] for i in 1:length(sys.xData) ]
 
 		# plot trajectory line for nth particle
 		scatter!(
@@ -393,8 +401,8 @@ function plot_trajectories(sys::ParticleSystem, particles::Vector{Int64}=[ 1 ])
 
 		# plot initial position for nth particle
 		scatter!(
-			[ sys.xPoints[1][2n-1] ], 
-			[ sys.xPoints[1][2n] ],
+			[ sys.xData[1][2n-1] ], 
+			[ sys.xData[1][2n] ],
 			markersize = 4.0, 
 			markercolor = n,
 			markerstrokewidth = 0.4,
@@ -405,8 +413,8 @@ function plot_trajectories(sys::ParticleSystem, particles::Vector{Int64}=[ 1 ])
 
 		# plot final position for nth particle
 		scatter!(
-			[ sys.xPoints[end][2n-1] ], 
-			[ sys.xPoints[end][2n] ],
+			[ sys.xData[end][2n-1] ], 
+			[ sys.xData[end][2n] ],
 			markersize = 4.0, 
 			markercolor = n,
 			markerstrokewidth = 0.4,
@@ -422,13 +430,13 @@ end
 function plot_temperature(sys::ParticleSystem)
 	initialize_plot()
 	plot!(
-		sys.timePoints, 
-		sys.tempPoints,
+		sys.timeData, 
+		sys.tempData,
 		#widen = true,
 	)
 	ylims!(
-		mean(sys.tempPoints) - std(sys.tempPoints) * 20, 
-		mean(sys.tempPoints) + std(sys.tempPoints) * 20, 
+		mean(sys.tempData) - std(sys.tempData) * 20, 
+		mean(sys.tempData) + std(sys.tempData) * 20, 
 	)
 	xlabel!("t")
 	ylabel!("T(t)")
@@ -439,13 +447,13 @@ end
 function plot_energy(sys::ParticleSystem)
 	initialize_plot()
 	plot!(
-		sys.timePoints, 
-		sys.energyPoints,
+		sys.timeData, 
+		sys.energyData,
 		#widen = true,
 	)
 	ylims!(
-		mean(sys.energyPoints) - 1, 
-		mean(sys.energyPoints) + 1
+		mean(sys.energyData) - 1, 
+		mean(sys.energyData) + 1
 	)
 	xlabel!("t")
 	ylabel!("E(t)")
@@ -455,19 +463,19 @@ end
 function plot_speed_distribution(sys::ParticleSystem, numSamples::Int64=5)
 	initialize_plot()
 
-	numDataPoints = Int64(length(sys.vPoints))
+	numDataPoints = Int64(length(sys.vData))
 	interval = Int64(floor(numDataPoints / numSamples))
 
 	samples = collect(1:interval:numDataPoints)
 	for s in samples
 		speed = sqrt.(
-			xcomponent(sys.vPoints[s]).^2 .* 
-			ycomponent(sys.vPoints[s]).^2
+			xcomponent(sys.vData[s]).^2 .* 
+			ycomponent(sys.vData[s]).^2
 		)
 		density!(
-			sys.vPoints[s],
+			sys.vData[s],
 			normalize = :pdf, 
-			label = "t = $(round(sys.timePoints[s], digits=2))",
+			label = "t = $(round(sys.timeData[s], digits=2))",
 		)
 	end
 	xlabel!("speed")
@@ -569,9 +577,14 @@ end
 function demo_2()
 	sys = ParticleSystem[]
 
+	# array for speed distribution plots
 	ps = Plots.Plot{Plots.GRBackend}[]
+
+	# array for trajectory plots
 	pt = Plots.Plot{Plots.GRBackend}[]
 
+	# initialize three systems with different initial conditions 
+	# but same KE and PE, evolve, and save plots
 	for i = 1:3
 		push!(sys, ParticleSystem(64, 120.0, 1.0))
 
@@ -579,15 +592,17 @@ function demo_2()
 		print_system_parameters(sys[i])
 
 		set_square_lattice_positions!(sys[i])
+		add_position_jitter!(sys[i])
 		set_random_velocities!(sys[i])
 		print_system_data(sys[i])
 
-		evolve!(sys[i], 10.0)
+		evolve!(sys[i], 40.0)
 		print_system_data(sys[i])
 		push!(ps, plot_speed_distribution(sys[i], 5))
 		push!(pt, plot_trajectories(sys[i], collect(1:64)) )
 	end
 
+	# plot speed distribution and trajectory plots
 	plot(
 		ps[1], ps[2], ps[3], 
 		pt[1], pt[2], pt[3], 
