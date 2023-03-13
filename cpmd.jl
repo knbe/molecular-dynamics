@@ -1,5 +1,10 @@
 # molecular dynamics 2d.
 
+# usage:
+# at the end of this script, 
+# under the header "DEMOS", 
+# ye shall find 
+
 using Statistics
 using StatsPlots
 
@@ -61,10 +66,11 @@ function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 end
 
 # some useful "views" of the state array
-@views positions(state) = state[1:Int64(length(state)/2)]
-@views velocities(state) = state[(Int64(length(state)/2)+1):end]
-@views xcomponent(vector) = vector[1:2:end]
-@views ycomponent(vector) = vector[2:2:end]
+# (read the performance tips chapter of the julia manual)
+@views positions(state) = state[ 1:Int64(length(state)/2) ]
+@views velocities(state) = state[ (Int64(length(state)/2)+1):end ]
+@views xcomponent(vector) = vector[ 1:2:end ]
+@views ycomponent(vector) = vector[ 2:2:end ]
 @views particle(n, vector) = [ vector[2n-1], vector[2n] ]
 
 # INITIALIZATION
@@ -72,12 +78,8 @@ end
 
 function set_random_positions!(sys::ParticleSystem)
 	println("\tposition configuration: random")
-
 	positions(sys.state) .= rand(2*sys.N) .* sys.L
 	cool!(sys)
-end
-
-function set_triangular_lattice_positions!(sys::ParticleSystem)
 end
 
 function set_square_lattice_positions!(sys::ParticleSystem)
@@ -85,7 +87,7 @@ function set_square_lattice_positions!(sys::ParticleSystem)
 
 	n = Int64(floor(sqrt(sys.N))) # num lattice points per axis
 	latticeSpacing = sys.L / n
-	
+
 	if sys.N != n^2
 		println("\t\toops... your chosen N=$(sys.N) is not a square number") 
 		println("\t\t-> resetting N to $(n^2).")
@@ -101,11 +103,14 @@ function set_square_lattice_positions!(sys::ParticleSystem)
 	end
 end
 
-function add_position_jitter!(sys::ParticleSystem)
-	println("\tadding random jitter to particle positions")
+function set_triangular_lattice_positions!(sys::ParticleSystem)
+end
+
+function add_position_jitter!(sys::ParticleSystem, jitter::Float64=0.5)
+	println("\tadding a wee bit of random jitter to particle positions...")
 
 	for i = 1:length(positions(sys.state))
-		sys.state[i] += rand() - 0.5
+		sys.state[i] += rand() - jitter
 	end
 end
 
@@ -125,7 +130,7 @@ function zero_total_momentum!(sys::ParticleSystem)
 end
 
 
-# FORCES
+# FORCES / POTENTIALS
 ################################################################################
 
 function force(sys::ParticleSystem)
@@ -140,6 +145,8 @@ function force(sys::ParticleSystem)
 	return force
 end
 
+# the minimum image approximation
+# (periodic boundary conditions)
 function minimum_image(xij::Float64, L::Float64)
 	if xij > (L/2)
 		xij -= L
@@ -194,6 +201,12 @@ function lennard_jones_potential(sys::ParticleSystem)
 	return 4.0 * U
 end
 
+function power_law_force(sys::ParticleSystem)
+end
+
+function power_law_potential(sys::ParticleSystem)
+end
+
 # TIME EVOLUTION
 ################################################################################
 
@@ -206,7 +219,7 @@ function keep_particles_in_box!(sys::ParticleSystem)
 		end
 	end
 
-#	# alternatively, using the ternary operator 
+#	# another way of doing this: use the ternary operator
 #	for i in 1:(2 * sys.N)
 #		positions(sys.state)[i] < 0.0 ?  
 #		positions(sys.state)[i] % sys.L + sys.L : 
@@ -215,13 +228,20 @@ function keep_particles_in_box!(sys::ParticleSystem)
 end
 
 function verlet_step!(sys::ParticleSystem)
+	# compute acceleration at current time
 	acceleration = force(sys)
 
+	# compute positions at t + dt
 	positions(sys.state) .+= 
-		velocities(sys.state) .* sys.dt .+ 0.5 .* acceleration .* (sys.dt)^2
+		velocities(sys.state) .* sys.dt .+ 
+		0.5 .* acceleration .* (sys.dt)^2
 
+	# enforce boundary conditions
+	# (basically check if any particles left the box and put them back)
+	# see function implementation for deets
 	keep_particles_in_box!(sys)
 
+	# compute velocities at t + dt
 	velocities(sys.state) .+= 
 		0.5 * sys.dt .* (acceleration + force(sys))
 end
@@ -444,7 +464,7 @@ function plot_temperature(sys::ParticleSystem)
 
 end
 
-function plot_energy(sys::ParticleSystem)
+function plot_energy(sys::ParticleSystem, ylimit::Float64=1.0)
 	initialize_plot()
 	plot!(
 		sys.timeData, 
@@ -452,8 +472,10 @@ function plot_energy(sys::ParticleSystem)
 		#widen = true,
 	)
 	ylims!(
-		mean(sys.energyData) - 1, 
-		mean(sys.energyData) + 1
+		#ylimit * (mean(sys.energyData) - 1), 
+		#ylimit * (mean(sys.energyData) + 1)
+		mean(sys.energyData) - std(sys.energyData) * 10, 
+		mean(sys.energyData) + std(sys.energyData) * 10, 
 	)
 	xlabel!("t")
 	ylabel!("E(t)")
@@ -490,6 +512,10 @@ function print_hello()
 	println("number of threads: ", Threads.nthreads())
 end
 
+function print_bonjour()
+	println("\nbonjour")
+end
+
 function print_system_parameters(sys::ParticleSystem)
 	println("\nsystem parameters:")
 	println("\tN =  $(sys.N)   (number of particles)")
@@ -501,11 +527,11 @@ function print_system_data(sys::ParticleSystem)
 	println("\nsystem data at time t=$(round(sys.t, digits=4))")
 
 	if sys.steps == 0
-		println("\ttemperature:     $(sys.T₀)")
+		println("\ttemperature:     $(temperature(sys))")
 		println("\tenergy:          $(energy(sys))")
 	else
 		println("\tsteps evolved:   $(sys.steps)")
-		println("\ttemperature:     $(sys.T₀)")
+		println("\ttemperature:     $(temperature(sys))")
 		println("\tenergy:          $(energy(sys))")
 		println("\tmean energy:     $(mean_energy(sys))")
 		println("\tstd energy:      $(std_energy(sys))")
@@ -524,6 +550,9 @@ end
 
 # DEMO 0: APPROACH TO EQUILIBRIUM
 function demo_0()
+	println("\nDEMO 0: APPROACH TO EQUILIBRIUM")
+	println("----------------------------------------") 
+
 	sys = ParticleSystem(64, 120.0, 1.0)
 	print_system_parameters(sys)
 
@@ -542,12 +571,15 @@ function demo_0()
 	plot(
 		p1, p2, p3, p4,
 		layout = grid(2,2, heights=[0.7,0.3]),
-		size = (1200,800)
+		size = (1280,720)
 	)
 end
 
 # DEMO 1: TIME REVERSAL TEST
 function demo_1()
+	println("\nDEMO 1: TIME REVERSAL TEST")
+	println("----------------------------------------") 
+
 	sys = ParticleSystem(64, 120.0, 1.0)
 	print_system_parameters(sys)
 
@@ -569,12 +601,15 @@ function demo_1()
 	plot(
 		p1, p2, p3,
 		layout = (1,3),
-		size = (1800,600)
+		size = (1200,400)
 	)
 end
 
-# DEMO 2: SPEED DISTRIBUTIONS
+# DEMO 2: SPEED DISTRIBUTION
 function demo_2()
+	println("\nDEMO 2: SPEED DISTRIBUTION")
+	println("----------------------------------------") 
+
 	sys = ParticleSystem[]
 
 	# array for speed distribution plots
@@ -608,5 +643,40 @@ function demo_2()
 		pt[1], pt[2], pt[3], 
 		layout = (2,3),
 		size = (1920,1080)
+	)
+end
+
+# DEMO 3: MELTING TRANSITION
+function demo_3()
+	println("\nDEMO 3: MELTING TRANSITION")
+	println("----------------------------------------")
+
+	# initialize system of particles on square lattice with zero velocity
+	sys = ParticleSystem(16, 4.0, 5.0)
+	set_square_lattice_positions!(sys)
+	print_system_data(sys)
+	p1 = plot_positions(sys)
+
+	# evolve the system and watch them "crystallize" into a triangular lattice
+	evolve!(sys, 20.0)
+	print_system_data(sys)
+	p2 = plot_trajectories(sys, collect(1:16))
+
+	# now, increase the temperature of the system by giving the particles
+	# some velocity. evolve the system and plot the trajectories.
+	set_random_velocities!(sys)
+	evolve!(sys, 60.0)
+	print_system_data(sys)
+	p3 = plot_trajectories(sys, collect(1:16))
+
+	# some more plots
+	p4 = plot_energy(sys, 0.0)
+	p5 = plot_temperature(sys)
+	p6 = plot_speed_distribution(sys, 20)
+
+	plot(
+		p1, p2, p3, p4, p5, p6,
+		layout = (2,3), 
+		size = (1280,720)
 	)
 end
