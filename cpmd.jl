@@ -340,15 +340,18 @@ end
 
 function plot_positions(sys::ParticleSystem)
 	initialize_plot()
-	scatter!(
-		xcomponent(positions(sys.state)), 
-		ycomponent(positions(sys.state)), 
-		markersize = 3.0,
-		grid = true,
-		#widen = true,
-		framestyle = :box,
-		legend = false,
+	for n = 1:sys.N
+		scatter!(
+			[ xcomponent(positions(sys.state))[n] ], 
+			[ ycomponent(positions(sys.state))[n] ], 
+			markersize = 4.0,
+			markercolor = n,
+			markerstrokewidth = 0.4,
+			grid = true,
+			framestyle = :box,
+			legend = false,
 		)
+	end
 	xlims!(0, sys.L)
 	ylims!(0, sys.L)
 	xlabel!("x")
@@ -358,49 +361,61 @@ end
 
 function plot_trajectories(sys::ParticleSystem, particles::Vector{Int64}=[ 1 ])
 	initialize_plot()
-	scatter!(
-		xcomponent(positions(sys.state)), 
-		ycomponent(positions(sys.state)), 
-		markersize = 3.0,
-		grid = true,
-		framestyle = :box,
-		label = "",
-		widen = false,
+	for n = 1:sys.N
+		scatter!(
+			[ xcomponent(positions(sys.state))[n] ], 
+			[ ycomponent(positions(sys.state))[n] ], 
+			markersize = 4.0,
+			markercolor = n,
+			markerstrokewidth = 0.4,
+			grid = true,
+			framestyle = :box,
+			legend = false,
 		)
-	for n in particles
+	end
+
+	for n in collect(particles)
 		xdata = [ sys.xPoints[i][2n-1] for i in 1:length(sys.xPoints) ]
 		ydata = [ sys.xPoints[i][2n] for i in 1:length(sys.xPoints) ]
+
 		# plot trajectory line for nth particle
-		plot!(
+		scatter!(
 			xdata, 
 			ydata,
-			linecolor = n,
-			label = "particle $n trajectory",
+			color = n,
+			#markerstrokewidth = 0,
+			markerstrokecolor = n,
+			markersize = 0.7,
+			markeralpha = 0.5,
+			label = false,
 			widen = false,
 		)
+
 		# plot initial position for nth particle
 		scatter!(
 			[ sys.xPoints[1][2n-1] ], 
 			[ sys.xPoints[1][2n] ],
-			markersize = 5.0, 
-			markeralpha = 0.5,
+			markersize = 4.0, 
 			markercolor = n,
-			label = "particle $n initial position",
+			markerstrokewidth = 0.4,
+			markeralpha = 0.3,
+			#label = "pcl. $n @t=t₀",
 			widen = false,
 		)
+
 		# plot final position for nth particle
 		scatter!(
 			[ sys.xPoints[end][2n-1] ], 
 			[ sys.xPoints[end][2n] ],
-			markersize = 5.0, 
-			markeralpha = 1.0,
+			markersize = 4.0, 
 			markercolor = n,
-			label = "particle $n current position",
+			markerstrokewidth = 0.4,
+			markeralpha = 1.0,
+			#label = "pcl $n @t=t",
 			widen = false,
 		)
 	end
-	title!("positions at time t=$(round(sys.t, digits=4)); \
-		\ntrajectories=$(particles)")
+	title!("positions & trajectories at time t=$(round(sys.t, digits=2))")
 	plot!()
 end
 
@@ -496,10 +511,10 @@ function demo_0()
 	print_system_data(sys)
 	p1 = plot_positions(sys)
 
-	evolve!(sys, 40.0)
+	evolve!(sys, 20.0)
 	print_system_data(sys)
 
-	p2 = plot_trajectories(sys, [ 1, 2, 3, 4, 5 ])
+	p2 = plot_trajectories(sys, collect(1:64))
 	p3 = plot_energy(sys)
 	p4 = plot_temperature(sys)
 
@@ -521,12 +536,14 @@ function demo_1()
 	p1 = plot_positions(sys)
 
 	evolve!(sys, 50.0)
-	p2 = plot_trajectories(sys, [1, 3, 6, 9, 12, 15, 18, 21 ])
+	#p2 = plot_trajectories(sys, collect(1:64))
+	p2 = plot_positions(sys)
 
 	reverse_time!(sys)
 	evolve!(sys, 50.0)
 	print_system_data(sys)
-	p3 = plot_trajectories(sys, [1, 3, 6, 9, 12, 15, 18, 21 ])
+	#p3 = plot_trajectories(sys, collect(1:64))
+	p3 = plot_positions(sys)
 
 	plot(
 		p1, p2, p3,
