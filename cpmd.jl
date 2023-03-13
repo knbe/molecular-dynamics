@@ -1,9 +1,16 @@
 # molecular dynamics 2d.
 
 # usage:
-# at the end of this script, 
-# under the header "DEMOS", 
-# ye shall find 
+# at the end of this script, under the header "DEMOS", 
+# you'll see some functions which implement demos from GN chapter 9.
+# simply load the script in your development environment 
+# (I strongly recommend not using jupiter)
+# and in a the console/REPL run 
+#	demo_0()
+# etc.
+
+# lmk if this script is giving you grief or if you find any bugs
+# kian@brown.edu
 
 using Statistics
 using StatsPlots
