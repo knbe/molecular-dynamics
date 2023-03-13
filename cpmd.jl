@@ -1,7 +1,7 @@
 # molecular dynamics 2d.
 
 using Statistics
-using Plots
+using StatsPlots
 
 mutable struct ParticleSystem
 	N::Int64			# number of particles
@@ -452,24 +452,37 @@ function plot_energy(sys::ParticleSystem)
 	title!("energy vs time")
 end
 
-function plot_velocity_histogram(sys::ParticleSystem)
+function plot_speed_distribution(sys::ParticleSystem, numSamples::Int64=5)
 	initialize_plot()
-	histogram!(
-		sys.vPoints, 
-		normalize = :pdf, 
-		bins = -2.0:0.2:2.0,
-		legend = :false,
-	)
-	xlabel!("v")
-	title!("velocity histogram")
+
+	numDataPoints = Int64(length(sys.vPoints))
+	interval = Int64(floor(numDataPoints / numSamples))
+
+	samples = collect(1:interval:numDataPoints)
+	for s in samples
+		speed = sqrt.(
+			xcomponent(sys.vPoints[s]).^2 .* 
+			ycomponent(sys.vPoints[s]).^2
+		)
+		density!(
+			sys.vPoints[s],
+			normalize = :pdf, 
+			label = "t = $(round(sys.timePoints[s], digits=2))",
+		)
+	end
+	xlabel!("speed")
+	title!("speed distribution")
 end
 
 # CONSOLE PRINT DATA
 ################################################################################
 
-function print_system_parameters(sys::ParticleSystem)
+function print_hello()
 	println("\nmolecular dynamics!")
 	println("number of threads: ", Threads.nthreads())
+end
+
+function print_system_parameters(sys::ParticleSystem)
 	println("\nsystem parameters:")
 	println("\tN =  $(sys.N)   (number of particles)")
 	println("\tL =  $(sys.L)   (side length of square box)")
@@ -549,5 +562,36 @@ function demo_1()
 		p1, p2, p3,
 		layout = (1,3),
 		size = (1800,600)
+	)
+end
+
+# DEMO 2: SPEED DISTRIBUTIONS
+function demo_2()
+	sys = ParticleSystem[]
+
+	ps = Plots.Plot{Plots.GRBackend}[]
+	pt = Plots.Plot{Plots.GRBackend}[]
+
+	for i = 1:3
+		push!(sys, ParticleSystem(64, 120.0, 1.0))
+
+		println("\nSYSTEM $i")
+		print_system_parameters(sys[i])
+
+		set_square_lattice_positions!(sys[i])
+		set_random_velocities!(sys[i])
+		print_system_data(sys[i])
+
+		evolve!(sys[i], 10.0)
+		print_system_data(sys[i])
+		push!(ps, plot_speed_distribution(sys[i], 5))
+		push!(pt, plot_trajectories(sys[i], collect(1:64)) )
+	end
+
+	plot(
+		ps[1], ps[2], ps[3], 
+		pt[1], pt[2], pt[3], 
+		layout = (2,3),
+		size = (1920,1080)
 	)
 end
