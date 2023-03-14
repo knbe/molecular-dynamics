@@ -5,7 +5,7 @@
 # you'll see some functions which implement demos from GN chapter 9.
 # simply load the script in your development environment 
 # (I strongly recommend not using jupiter)
-# and in a the console/REPL run 
+# and in the console/REPL run 
 #	demo_0()
 # etc.
 
