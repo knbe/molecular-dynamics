@@ -1,10 +1,34 @@
-use loops, not vectorised expressions
---------------------------------------------------------------------------------
+# use loops rather than vectorised expressions
 
-don't create arrays in loops
---------------------------------------------------------------------------------
+julia can run this
+
+```
+for i = 1:length(x)
+    x[i] += sqrt(a * v[i]) 
+end
+```
+
+faster than
+
+```
+x .+= sqrt.(a .* v)
+```
+
+# use @views for slicing a large array
+
+rather than creating a bunch of subarrays in a loop. 
+
+https://docs.julialang.org/en/v1/manual/performance-tips/
+
+# try not to create arrays in loops
+
+as this increases memory allocation.
 
   i.e. don't write 
+
+```
+
+```
 
   for ...
     x = mean(x, params)
@@ -19,29 +43,8 @@ don't create arrays in loops
 
   ie preallocate the array and use the functions to update them.
 
-profile code
---------------------------------------------------------------------------------
+# use the Profile module
 
-better to have a struct of arrays rather than an array of structs
---------------------------------------------------------------------------------
+https://docs.julialang.org/en/v1/manual/profile/
 
-bad:
-
-struct F
-  a::Int
-  b::Int
-end
-
-good:
-
-struct FA
-  a::Vector{Int}
-  b::Vector{Int}
-end
-
-
-type annotations only when necessary
---------------------------------------------------------------------------------
-
-- if a function _can_ run with any types, then leave it be. only add type 
-  annotations you know the function can run with only one input type
+to check how many times a method gets called in a loop.
