@@ -38,7 +38,7 @@ end
 function ParticleSystem(N::Int64=64, L::Float64=10.0, T₀::Float64=1.0)
 	t = 0.0
 	dt = 0.001
-	state = zeros(4N) # state space array, [x1, y1, x2, y2, ..., vx1, vy1, ...]
+	state = zeros(4N) # state space array, [x1,y1,x2,y2,...,vx1,vy1,...]
 	steps = 0
 	timeData = Float64[]
 	energyData = Float64[]
@@ -664,7 +664,8 @@ function demo_3()
 	print_system_data(sys)
 	p1 = plot_positions(sys)
 
-	# evolve the system and watch them "crystallize" into a triangular lattice
+	# evolve the system and watch them "crystallize" 
+	# into a triangular lattice formation
 	evolve!(sys, 20.0)
 	print_system_data(sys)
 	p2 = plot_trajectories(sys, collect(1:16))
