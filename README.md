@@ -1,3 +1,1 @@
-molecular dynamics.
-
-![](media/melting-transition.gif)
+![melting transition](media/melting-transition.gif)
