@@ -9,6 +9,9 @@
 #	demo_0()
 # etc.
 
+# demos 0,1,3 can optionally make an animated gif
+# if you call it with the optional argument demo_3(gif=1)
+
 # lmk if this script is giving you grief or if you find any bugs
 # kian@brown.edu
 
@@ -600,7 +603,7 @@ end
 
 
 # DEMO 0: APPROACH TO EQUILIBRIUM
-function demo_0(gif=0)
+function demo_0(;gif=0)
 	println("\nDEMO 0: APPROACH TO EQUILIBRIUM")
 	println("----------------------------------------") 
 
@@ -632,7 +635,7 @@ function demo_0(gif=0)
 end
 
 # DEMO 1: TIME REVERSAL TEST
-function demo_1(gif=0)
+function demo_1(;gif=0)
 	println("\nDEMO 1: TIME REVERSAL TEST")
 	println("----------------------------------------") 
 
@@ -709,7 +712,7 @@ function demo_2()
 end
 
 # DEMO 3: MELTING TRANSITION
-function demo_3(gif=0)
+function demo_3(;gif=0)
 	println("\nDEMO 3: MELTING TRANSITION")
 	println("----------------------------------------")
 
