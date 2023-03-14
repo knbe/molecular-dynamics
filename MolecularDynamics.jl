@@ -1,4 +1,16 @@
-module MolecularDynamics
+# molecular dynamics 2d.
+
+# usage:
+# at the end of this script, under the header "DEMOS", 
+# you'll see some functions which implement demos from GN chapter 9.
+# simply load the script in your development environment 
+# (I strongly recommend not using jupiter)
+# and in the console/REPL run 
+#	demo_0()
+# etc.
+
+# lmk if this script is giving you grief or if you find any bugs
+# kian@brown.edu
 
 using Statistics
 using StatsPlots
@@ -361,6 +373,50 @@ function initialize_plot()
 	)
 end
 
+function plot_positions_t(sys::ParticleSystem, t::Int64)
+	initialize_plot()
+	for n = 1:sys.N
+		scatter!(
+			[ sys.xData[t][2n-1] ], 
+			[ sys.xData[t][2n] ], 
+			markersize = 4.0,
+			markercolor = n,
+			markerstrokewidth = 0.4,
+			grid = true,
+			framestyle = :box,
+			legend = false,
+		)
+	end
+end
+
+function animate(sys::ParticleSystem, interval::Int64=1)
+	println("\ngenerating gif...")
+
+	scatter!()
+	animation = @animate for t in 1:length(sys.xData)
+		scatter()
+		for n = 1:sys.N
+			scatter!(
+				[ sys.xData[t][2n-1] ], 
+				[ sys.xData[t][2n] ], 
+				#markersize = 4.0,
+				markercolor = n,
+				#markerstrokewidth = 0.4,
+				grid = true,
+				framestyle = :box,
+				legend = false,
+			)
+		end
+		xlims!(0, sys.L)
+		ylims!(0, sys.L)
+		xlabel!("x")
+		ylabel!("y")
+	end every interval
+
+	gif(animation, "./animation.gif")
+	println("done.")
+end
+
 function plot_positions(sys::ParticleSystem)
 	initialize_plot()
 	for n = 1:sys.N
@@ -544,7 +600,7 @@ end
 
 
 # DEMO 0: APPROACH TO EQUILIBRIUM
-function demo_0()
+function demo_0(gif=0)
 	println("\nDEMO 0: APPROACH TO EQUILIBRIUM")
 	println("----------------------------------------") 
 
@@ -563,6 +619,11 @@ function demo_0()
 	p3 = plot_energy(sys)
 	p4 = plot_temperature(sys)
 
+	# make gif
+	if gif == 1
+		animate(sys, 1)
+	end
+
 	plot(
 		p1, p2, p3, p4,
 		layout = grid(2,2, heights=[0.7,0.3]),
@@ -571,7 +632,7 @@ function demo_0()
 end
 
 # DEMO 1: TIME REVERSAL TEST
-function demo_1()
+function demo_1(gif=0)
 	println("\nDEMO 1: TIME REVERSAL TEST")
 	println("----------------------------------------") 
 
@@ -592,6 +653,11 @@ function demo_1()
 	print_system_data(sys)
 	#p3 = plot_trajectories(sys, collect(1:64))
 	p3 = plot_positions(sys)
+
+	# make gif
+	if gif == 1
+		animate(sys, 4)
+	end
 
 	plot(
 		p1, p2, p3,
@@ -632,6 +698,7 @@ function demo_2()
 		push!(pt, plot_trajectories(sys[i], collect(1:64)) )
 	end
 
+
 	# plot speed distribution and trajectory plots
 	plot(
 		ps[1], ps[2], ps[3], 
@@ -642,12 +709,12 @@ function demo_2()
 end
 
 # DEMO 3: MELTING TRANSITION
-function demo_3()
+function demo_3(gif=0)
 	println("\nDEMO 3: MELTING TRANSITION")
 	println("----------------------------------------")
 
 	# initialize system of particles on square lattice with zero velocity
-	sys = ParticleSystem(16, 4.0, 5.0)
+	sys = ParticleSystem(100, 10.0, 5.0)
 	set_square_lattice_positions!(sys)
 	print_system_data(sys)
 	p1 = plot_positions(sys)
@@ -656,19 +723,24 @@ function demo_3()
 	# into a triangular lattice formation
 	evolve!(sys, 20.0)
 	print_system_data(sys)
-	p2 = plot_trajectories(sys, collect(1:16))
+	p2 = plot_trajectories(sys, collect(1:100))
 
 	# now, increase the temperature of the system by giving the particles
 	# some velocity. evolve the system and plot the trajectories.
 	set_random_velocities!(sys)
 	evolve!(sys, 60.0)
 	print_system_data(sys)
-	p3 = plot_trajectories(sys, collect(1:16))
+	p3 = plot_trajectories(sys, collect(1:100))
 
 	# some more plots
 	p4 = plot_energy(sys, 0.0)
 	p5 = plot_temperature(sys)
 	p6 = plot_speed_distribution(sys, 20)
+
+	# make gif
+	if gif == 1
+		animate(sys, 1)
+	end
 
 	plot(
 		p1, p2, p3, p4, p5, p6,
@@ -676,6 +748,3 @@ function demo_3()
 		size = (1280,720)
 	)
 end
-
-
-end # module
